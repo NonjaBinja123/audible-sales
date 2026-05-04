@@ -67,7 +67,6 @@ async function init() {
     restoreLibation();
     renderHeader();
     applyFilters();
-    setTimeout(updateStickyOffsets, 0);
   } catch(e) {
     document.getElementById('sales-tbody').innerHTML =
       `<tr><td colspan="20" class="empty-msg">Failed to load data: ${e.message}</td></tr>`;
@@ -269,6 +268,7 @@ function applySort() {
 // ─── Render ───────────────────────────────────────────────────────────────────
 function renderHeader() {
   const tr = document.querySelector('#sales-table thead tr');
+  tr.style.top = stickyTop() + 'px';
   tr.innerHTML = '';
 
   for (const col of COLUMNS) {
@@ -603,12 +603,10 @@ function esc(s) {
 }
 
 // ─── Sticky offsets ───────────────────────────────────────────────────────────
-function updateStickyOffsets() {
-  const h = document.getElementById('sticky-wrap').offsetHeight;
-  const theadRow = document.querySelector('#sales-table thead tr');
-  if (theadRow) theadRow.style.top = h + 'px';
+function stickyTop() {
+  return document.getElementById('sticky-wrap').offsetHeight;
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 init();
-window.addEventListener('resize', updateStickyOffsets);
+window.addEventListener('resize', renderHeader);
