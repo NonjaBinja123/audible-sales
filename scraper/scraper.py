@@ -152,6 +152,74 @@ def _scrape_listing(session: curl.Session, start_url: str, sale_type: str) -> li
 
 
 # ---------------------------------------------------------------------------
+# Daily deal helpers
+# ---------------------------------------------------------------------------
+
+def _find_daily_deal_asin(soup) -> str | None:
+    widget = soup.select_one('[id*="adbl-daily-deal"]')
+    if not widget:
+        return None
+    link = widget.select_one('a[href*="/pd/"]')
+    if not link:
+        return None
+    m = re.search(r'/pd/([A-Z0-9]{10})', link.get('href', ''))
+    return m.group(1) if m else None
+
+
+def _fetch_daily_deal(asin: str) -> dict | None:
+    """Fetch daily deal item: price from product page, metadata from API."""
+    # Price from product page (reflects live sale price)
+    session = _make_session()
+    price = regular_price = None
+    try:
+        r    = session.get(f"{BASE}/pd/{asin}?{OVR}", timeout=20)
+        soup = BeautifulSoup(r.text, "html.parser")
+        sale_el = soup.select_one(".buybox-sale-price")
+        if sale_el:
+            if m := re.search(r'\$([\d.]+)', sale_el.get_text()):
+                price = float(m.group(1))
+        reg_el = soup.select_one(".buybox-regular-price")
+        if reg_el:
+            if m := re.search(r'\$([\d.]+)', reg_el.get_text()):
+                regular_price = float(m.group(1))
+    except Exception as e:
+        print(f"  Daily deal page error: {e}", file=sys.stderr)
+
+    # Metadata from API
+    try:
+        auth = audible.Authenticator.from_file(AUTH_FILE)
+        with audible.Client(auth=auth) as client:
+            resp = client.get(
+                f"1.0/catalog/products/{asin}",
+                response_groups="product_desc,contributors,media,rating",
+            )
+        p        = resp.get("product", resp)
+        authors  = p.get("authors")  or []
+        narrs    = p.get("narrators") or []
+        runtime  = p.get("runtime_length_min") or 0
+        overall  = (p.get("rating") or {}).get("overall_distribution") or {}
+        return {
+            "type":          "daily",
+            "asin":          asin,
+            "title":         p.get("title"),
+            "author":        ", ".join(c.get("name","") for c in authors if c.get("name")),
+            "narrator":      ", ".join(n.get("name","") for n in narrs   if n.get("name")),
+            "genre":         None,
+            "tags":          None,
+            "length_hours":  round(runtime / 60, 1) if runtime else None,
+            "rating":        float(overall.get("display_average_rating", 0) or 0) or None,
+            "rating_count":  int(overall.get("num_ratings", 0) or 0) or None,
+            "price":         price,
+            "regular_price": regular_price,
+            "cover_url":     (p.get("product_images") or {}).get("500"),
+            "audible_url":   f"{BASE}/pd/{asin}",
+        }
+    except Exception as e:
+        print(f"  Daily deal API error: {e}", file=sys.stderr)
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Monthly deals (public — no auth needed)
 # ---------------------------------------------------------------------------
 
@@ -159,7 +227,26 @@ def scrape_monthly() -> list[dict]:
     session = _make_session()
     url     = f"{BASE}/ep/audiobook-deals?{OVR}"
     print(f"  Starting at {url}")
-    return _scrape_listing(session, url, "monthly")
+
+    # Identify daily deal ASIN from page 0 before full scrape
+    try:
+        r0          = session.get(url, timeout=20)
+        soup0       = BeautifulSoup(r0.text, "html.parser")
+        daily_asin  = _find_daily_deal_asin(soup0)
+        if daily_asin:
+            print(f"  Daily deal ASIN: {daily_asin}")
+    except Exception:
+        daily_asin = None
+
+    items = _scrape_listing(session, url, "monthly")
+
+    if daily_asin:
+        print(f"  Fetching daily deal data...")
+        daily_item = _fetch_daily_deal(daily_asin)
+        if daily_item:
+            items.append(daily_item)
+
+    return items
 
 
 # ---------------------------------------------------------------------------

@@ -62,6 +62,7 @@ async function init() {
     if (data.last_updated)
       el.textContent = 'Updated: ' + new Date(data.last_updated + 'Z').toLocaleString();
 
+    buildTypePills();
     buildGenrePills();
     buildTagsPanel();
     restoreLibation();
@@ -126,6 +127,23 @@ function toggleCol(key, on) {
 }
 
 // ─── Quick filters ────────────────────────────────────────────────────────────
+const TYPE_LABELS = {
+  '2for1':   '2-for-1',
+  'monthly': 'Monthly',
+  'daily':   'Daily Deal',
+  'cash':    'Cash Sale',
+};
+
+function buildTypePills() {
+  const types = [...new Set(allSales.map(s => s.type).filter(Boolean))].sort();
+  const container = document.getElementById('type-pills');
+  const allBtn = `<button class="pill active" onclick="setTypeFilter('', this)">All</button>`;
+  const typeBtns = types.map(t =>
+    `<button class="pill" onclick="setTypeFilter('${esc(t)}', this)">${TYPE_LABELS[t] || t}</button>`
+  ).join('');
+  container.innerHTML = allBtn + typeBtns;
+}
+
 function setTypeFilter(type, btn) {
   quickType = type;
   document.querySelectorAll('#type-pills .pill').forEach(p => p.classList.remove('active'));
