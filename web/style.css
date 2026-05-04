@@ -102,6 +102,53 @@ input[type="file"] { font-size:12px; }
   cursor:pointer;
 }
 
+/* ── Quick filter row ── */
+#quick-filters {
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  padding:6px 16px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+  position:sticky;
+  top:49px;
+  z-index:90;
+}
+
+#type-pills { display:flex; gap:4px; }
+#genre-pills { display:flex; gap:4px; flex-wrap:wrap; }
+
+.pill {
+  padding:4px 12px;
+  border-radius:20px;
+  border:1px solid var(--border);
+  background:var(--bg);
+  font-size:12px;
+  font-weight:600;
+  cursor:pointer;
+  white-space:nowrap;
+  transition:all .15s;
+  color:var(--text);
+}
+.pill:hover  { border-color:var(--orange); color:var(--orange); }
+.pill.active { background:var(--orange); border-color:var(--orange); color:#fff; }
+
+.pill-divider {
+  width:1px;
+  height:20px;
+  background:var(--border);
+  margin:0 4px;
+  flex-shrink:0;
+}
+
+#tags-picker { margin-left:auto; }
+#tags-btn { padding:4px 12px; border-radius:20px; border:1px solid var(--border); background:var(--bg); font-size:12px; font-weight:600; cursor:pointer; }
+#tags-btn:hover, #tags-btn.active { border-color:var(--orange); color:var(--orange); }
+#tags-btn.active { background:#fff8f0; }
+
+.cs-empty { padding:12px; font-size:12px; color:var(--muted); line-height:1.5; grid-column:1/-1; }
+
 /* ── Table wrap ── */
 #table-wrap { overflow-x:auto; padding-bottom:40px; }
 
@@ -112,7 +159,7 @@ thead tr {
   background:var(--surface);
   border-bottom:2px solid var(--border);
   position:sticky;
-  top:49px;
+  top:89px;
   z-index:50;
 }
 
@@ -196,6 +243,9 @@ td a:hover { color:var(--orange); text-decoration:underline; }
 .star-btn { background:none; border:none; cursor:pointer; font-size:18px; color:var(--border); padding:0; line-height:1; transition:color .1s, transform .1s; }
 .star-btn:hover  { color:#f59e0b; transform:scale(1.2); }
 .star-btn.active { color:#f59e0b; }
+
+/* ── Tags cell ── */
+.tags-cell { font-size:12px; color:var(--muted); max-width:220px; white-space:normal; line-height:1.4; }
 
 /* ── Empty ── */
 .empty-msg { text-align:center; padding:60px 20px; color:var(--muted); font-size:16px; }

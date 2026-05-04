@@ -4,9 +4,6 @@ const DATA_URL   = '../data/sales.json';
 const BAYESIAN_M = 100;
 
 // ─── Column definitions ───────────────────────────────────────────────────────
-// key: internal id | label: header text | always: can't hide | def: on by default
-// sort: sortable | filter: false|'list'|'range' | dk: data key on sale object
-
 const COLUMNS = [
   { key:'fav',           label:'★',          always:true,  def:true,  sort:false, filter:false,   dk:null },
   { key:'cover',         label:'Cover',       always:false, def:true,  sort:false, filter:false,   dk:null },
@@ -15,6 +12,7 @@ const COLUMNS = [
   { key:'author',        label:'Author',      always:false, def:true,  sort:true,  filter:'list',  dk:'author' },
   { key:'narrator',      label:'Narrator',    always:false, def:false, sort:true,  filter:'list',  dk:'narrator' },
   { key:'genre',         label:'Genre',       always:false, def:false, sort:true,  filter:'list',  dk:'genre' },
+  { key:'tags',          label:'Tags',        always:false, def:false, sort:false, filter:false,   dk:'tags' },
   { key:'length_hours',  label:'Length (h)',  always:false, def:true,  sort:true,  filter:'range', dk:'length_hours' },
   { key:'rating',        label:'Rating',      always:false, def:true,  sort:true,  filter:'range', dk:'rating' },
   { key:'rating_count',  label:'# Ratings',  always:false, def:true,  sort:true,  filter:'range', dk:'rating_count' },
@@ -26,30 +24,32 @@ const COLUMNS = [
 ];
 
 // ─── State ────────────────────────────────────────────────────────────────────
-
-let allSales     = [];
-let filtered     = [];
-let sortKey      = 'title';
-let sortAsc      = true;
-let favorites    = new Set(JSON.parse(localStorage.getItem('audible_favs') || '[]'));
-let ownedAsins   = new Set();
-let visibleCols  = new Set(
+let allSales      = [];
+let filtered      = [];
+let sortKey       = 'title';
+let sortAsc       = true;
+let favorites     = new Set(JSON.parse(localStorage.getItem('audible_favs') || '[]'));
+let ownedAsins    = new Set();
+let visibleCols   = new Set(
   JSON.parse(localStorage.getItem('audible_cols') ||
     JSON.stringify(COLUMNS.filter(c => c.def).map(c => c.key)))
 );
-// colFilters[dk] = { type:'list', excluded:Set } | { type:'range', min, max }
-let colFilters   = {};
+let colFilters    = {};
 let openFilterKey = null;
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
+// Quick filter state
+let quickType        = '';
+let activeGenres     = new Set();
+let selectedTags     = new Set();
 
+// ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
   showTosBanner();
   buildColSelector();
 
   try {
-    const data = await fetch(DATA_URL).then(r => r.json());
-    const rated = data.sales.filter(s => s.rating != null);
+    const data      = await fetch(DATA_URL).then(r => r.json());
+    const rated     = data.sales.filter(s => s.rating != null);
     const globalAvg = rated.reduce((a, s) => a + s.rating, 0) / (rated.length || 1);
 
     allSales = data.sales.map(s => ({
@@ -62,6 +62,8 @@ async function init() {
     if (data.last_updated)
       el.textContent = 'Updated: ' + new Date(data.last_updated + 'Z').toLocaleString();
 
+    buildGenrePills();
+    buildTagsPanel();
     renderHeader();
     applyFilters();
   } catch(e) {
@@ -71,19 +73,16 @@ async function init() {
 }
 
 // ─── Quality metrics ──────────────────────────────────────────────────────────
-
 function computeBayesian(rating, count, globalAvg) {
   if (rating == null || count == null) return null;
   return (count / (count + BAYESIAN_M)) * rating + (BAYESIAN_M / (count + BAYESIAN_M)) * globalAvg;
 }
-
 function computeWeighted(rating, count) {
   if (rating == null || count == null) return null;
   return rating * Math.log10(count + 1);
 }
 
 // ─── ToS ──────────────────────────────────────────────────────────────────────
-
 function showTosBanner() {
   if (!localStorage.getItem('audible_tos'))
     document.getElementById('tos-banner').hidden = false;
@@ -94,7 +93,6 @@ function dismissTos() {
 }
 
 // ─── Column selector ──────────────────────────────────────────────────────────
-
 function buildColSelector() {
   const panel = document.getElementById('col-selector');
   panel.innerHTML = COLUMNS.filter(c => !c.always).map(c => `
@@ -125,8 +123,76 @@ function toggleCol(key, on) {
   renderBody();
 }
 
-// ─── Filter logic ─────────────────────────────────────────────────────────────
+// ─── Quick filters ────────────────────────────────────────────────────────────
+function setTypeFilter(type, btn) {
+  quickType = type;
+  document.querySelectorAll('#type-pills .pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilters();
+}
 
+function buildGenrePills() {
+  const genres = [...new Set(allSales.map(s => s.genre).filter(Boolean))].sort();
+  const container = document.getElementById('genre-pills');
+  container.innerHTML = genres.map(g =>
+    `<button class="pill" data-genre="${esc(g)}" onclick="toggleGenrePill('${esc(g)}', this)">${esc(g)}</button>`
+  ).join('');
+  // hide divider if no genres
+  document.querySelector('.pill-divider').style.display = genres.length ? '' : 'none';
+}
+
+function toggleGenrePill(genre, btn) {
+  if (activeGenres.has(genre)) {
+    activeGenres.delete(genre);
+    btn.classList.remove('active');
+  } else {
+    activeGenres.add(genre);
+    btn.classList.add('active');
+  }
+  applyFilters();
+}
+
+// ─── Tags dropdown ────────────────────────────────────────────────────────────
+function buildTagsPanel() {
+  const allTags = new Set();
+  allSales.forEach(s => {
+    if (s.tags) s.tags.split(';').forEach(t => { const v = t.trim(); if (v) allTags.add(v); });
+  });
+
+  const panel = document.getElementById('tags-selector');
+  if (allTags.size === 0) {
+    panel.innerHTML = '<p class="cs-empty">No tags available yet.<br>Tags will appear after genre enrichment is added to the scraper.</p>';
+    return;
+  }
+
+  panel.innerHTML = [...allTags].sort().map(t =>
+    `<label class="cs-item">
+      <input type="checkbox" value="${esc(t)}" onchange="toggleTag('${esc(t)}', this.checked)">
+      ${esc(t)}
+    </label>`
+  ).join('');
+}
+
+function toggleTagsPanel() {
+  const p = document.getElementById('tags-selector');
+  p.hidden = !p.hidden;
+  if (!p.hidden) {
+    const onOut = e => {
+      if (p.contains(e.target) || e.target.closest('#tags-btn')) return;
+      p.hidden = true;
+      document.removeEventListener('mousedown', onOut);
+    };
+    setTimeout(() => document.addEventListener('mousedown', onOut), 0);
+  }
+}
+
+function toggleTag(tag, checked) {
+  checked ? selectedTags.add(tag) : selectedTags.delete(tag);
+  document.getElementById('tags-btn').classList.toggle('active', selectedTags.size > 0);
+  applyFilters();
+}
+
+// ─── Filter logic ─────────────────────────────────────────────────────────────
 function isFilterActive(dk) {
   const f = colFilters[dk];
   if (!f) return false;
@@ -141,6 +207,21 @@ function applyFilters() {
   filtered = allSales.filter(s => {
     if (favsOnly && !favorites.has(s.asin)) return false;
 
+    // Quick type pill
+    if (quickType && s.type !== quickType) return false;
+
+    // Quick genre pills (OR within genres, AND with other filters)
+    if (activeGenres.size > 0 && !activeGenres.has(s.genre)) return false;
+
+    // Tags filter (OR: item must have at least one selected tag)
+    if (selectedTags.size > 0) {
+      const itemTags = new Set(
+        s.tags ? s.tags.split(';').map(t => t.trim()).filter(Boolean) : []
+      );
+      if (![...selectedTags].some(t => itemTags.has(t))) return false;
+    }
+
+    // Column filters
     for (const [dk, f] of Object.entries(colFilters)) {
       if (f.type === 'list' && f.excluded.size > 0) {
         const sv = s[dk] == null ? '(blank)' : String(s[dk]);
@@ -159,7 +240,6 @@ function applyFilters() {
 }
 
 // ─── Sort ─────────────────────────────────────────────────────────────────────
-
 function toggleSort(dk) {
   if (sortKey === dk) sortAsc = !sortAsc;
   else { sortKey = dk; sortAsc = true; }
@@ -171,8 +251,8 @@ function applySort() {
   filtered.sort((a, b) => {
     let va = a[sortKey], vb = b[sortKey];
     if (va == null && vb == null) return 0;
-    if (va == null) return sortAsc  ?  1 : -1;
-    if (vb == null) return sortAsc  ? -1 :  1;
+    if (va == null) return  sortAsc ?  1 : -1;
+    if (vb == null) return  sortAsc ? -1 :  1;
     if (typeof va === 'string') return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
     return sortAsc ? va - vb : vb - va;
   });
@@ -180,7 +260,6 @@ function applySort() {
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
-
 function renderHeader() {
   const tr = document.querySelector('#sales-table thead tr');
   tr.innerHTML = '';
@@ -188,7 +267,7 @@ function renderHeader() {
   for (const col of COLUMNS) {
     if (!col.always && !visibleCols.has(col.key)) continue;
 
-    const th  = document.createElement('th');
+    const th     = document.createElement('th');
     const active = col.filter && isFilterActive(col.dk);
     if (active) th.classList.add('filtered');
 
@@ -208,7 +287,7 @@ function renderHeader() {
       const fbtn = document.createElement('button');
       fbtn.className = 'filter-btn' + (active ? ' active' : '');
       fbtn.textContent = '▾';
-      fbtn.title = active ? 'Filter active — click to edit' : 'Filter';
+      fbtn.title = active ? 'Filter active' : 'Filter';
       fbtn.onclick = e => { e.stopPropagation(); openFilter(col.key, fbtn); };
       inner.appendChild(fbtn);
     }
@@ -220,8 +299,8 @@ function renderHeader() {
 
 function renderBody() {
   const tbody = document.getElementById('sales-tbody');
-  const count = document.getElementById('count');
-  count.textContent = filtered.length.toLocaleString() + ' title' + (filtered.length !== 1 ? 's' : '');
+  document.getElementById('count').textContent =
+    filtered.length.toLocaleString() + ' title' + (filtered.length !== 1 ? 's' : '');
 
   if (!filtered.length) {
     tbody.innerHTML = '<tr><td colspan="20" class="empty-msg">No results match your filters.</td></tr>';
@@ -323,6 +402,9 @@ function buildCell(sale, col) {
     case 'length_hours':
       td.textContent = sale.length_hours != null ? sale.length_hours.toFixed(1) + ' h' : '';
       td.className = 'num'; break;
+    case 'tags':
+      td.textContent = sale.tags || '';
+      td.className = 'tags-cell'; break;
     default:
       td.textContent = sale[col.dk] ?? '';
   }
@@ -335,7 +417,6 @@ function renderStars(r) {
 }
 
 // ─── Column filter dropdowns ──────────────────────────────────────────────────
-
 function openFilter(colKey, anchor) {
   if (openFilterKey === colKey) { closeFilter(); return; }
   closeFilter();
@@ -349,7 +430,6 @@ function openFilter(colKey, anchor) {
   col.filter === 'list' ? buildListPanel(panel, col) : buildRangePanel(panel, col);
   document.body.appendChild(panel);
 
-  // Position below anchor
   const r = anchor.getBoundingClientRect();
   let left = r.left + window.scrollX;
   if (left + 260 > window.innerWidth) left = window.innerWidth - 264;
@@ -374,7 +454,7 @@ function closeFilter() {
 }
 
 function buildListPanel(panel, col) {
-  const dk = col.dk;
+  const dk   = col.dk;
   const excl = colFilters[dk]?.excluded;
 
   const vals = [...new Set(allSales.map(s => {
@@ -399,11 +479,11 @@ function buildListPanel(panel, col) {
 }
 
 function buildRangePanel(panel, col) {
-  const dk = col.dk;
+  const dk  = col.dk;
   const cur = colFilters[dk] || {};
   const vals = allSales.map(s => s[dk]).filter(v => v != null).map(Number);
-  const lo = vals.length ? Math.min(...vals) : 0;
-  const hi = vals.length ? Math.max(...vals) : 0;
+  const lo  = vals.length ? Math.min(...vals) : 0;
+  const hi  = vals.length ? Math.max(...vals) : 0;
   const step = ['rating','bayesian','weighted','length_hours','price','regular_price'].includes(dk) ? '0.1' : '1';
 
   panel.innerHTML = `
@@ -424,17 +504,14 @@ function fpSearch(input) {
 
 function fpToggle(dk, cb) {
   if (!colFilters[dk]) colFilters[dk] = { type: 'list', excluded: new Set() };
-  const excl = colFilters[dk].excluded;
-  cb.checked ? excl.delete(cb.value) : excl.add(cb.value);
-  renderHeader();
-  applyFilters();
+  cb.checked ? colFilters[dk].excluded.delete(cb.value) : colFilters[dk].excluded.add(cb.value);
+  renderHeader(); applyFilters();
 }
 
 function fpSelectAll(dk) {
   if (colFilters[dk]) colFilters[dk].excluded.clear();
   document.querySelectorAll('#filter-panel .fp-item input').forEach(i => i.checked = true);
-  renderHeader();
-  applyFilters();
+  renderHeader(); applyFilters();
 }
 
 function fpClearList(dk) {
@@ -442,31 +519,22 @@ function fpClearList(dk) {
   const vals = [...document.querySelectorAll('#filter-panel .fp-item input')].map(i => i.value);
   colFilters[dk].excluded = new Set(vals);
   document.querySelectorAll('#filter-panel .fp-item input').forEach(i => i.checked = false);
-  renderHeader();
-  applyFilters();
+  renderHeader(); applyFilters();
 }
 
 function fpRange(dk) {
   const min = document.getElementById('rfmin')?.value;
   const max = document.getElementById('rfmax')?.value;
-  colFilters[dk] = {
-    type: 'range',
-    min: min !== '' ? +min : null,
-    max: max !== '' ? +max : null,
-  };
-  renderHeader();
-  applyFilters();
+  colFilters[dk] = { type:'range', min: min !== '' ? +min : null, max: max !== '' ? +max : null };
+  renderHeader(); applyFilters();
 }
 
 function fpClearRange(dk) {
   delete colFilters[dk];
-  closeFilter();
-  renderHeader();
-  applyFilters();
+  closeFilter(); renderHeader(); applyFilters();
 }
 
 // ─── Favourites ───────────────────────────────────────────────────────────────
-
 function toggleFav(asin, btn) {
   favorites.has(asin) ? favorites.delete(asin) : favorites.add(asin);
   btn.classList.toggle('active', favorites.has(asin));
@@ -475,7 +543,6 @@ function toggleFav(asin, btn) {
 }
 
 // ─── Libation ─────────────────────────────────────────────────────────────────
-
 function loadLibation(file) {
   if (!file) return;
   const reader = new FileReader();
@@ -485,9 +552,7 @@ function loadLibation(file) {
     const idx    = header.findIndex(h => h === 'asin' || h === 'audible product id');
     if (idx === -1) { alert('No ASIN or "Audible Product ID" column found.'); return; }
     ownedAsins = new Set(
-      lines.slice(1)
-        .map(l => (l.split(',')[idx] || '').trim().replace(/^"|"$/g,''))
-        .filter(Boolean)
+      lines.slice(1).map(l => (l.split(',')[idx] || '').trim().replace(/^"|"$/g,'')).filter(Boolean)
     );
     document.getElementById('libation-clear').hidden = false;
     renderBody();
@@ -503,11 +568,9 @@ function clearLibation() {
 }
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
-
 function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
-
 init();

@@ -22,21 +22,17 @@
     <span id="last-updated"></span>
   </header>
 
+  <!-- Row 1: meta controls -->
   <div id="controls">
-
-    <div class="ctrl-group">
-      <div class="col-picker">
-        <button id="cols-btn" onclick="toggleColPanel()">Columns ▾</button>
-        <div id="col-selector" class="col-panel" hidden></div>
-      </div>
+    <div class="col-picker">
+      <button id="cols-btn" onclick="toggleColPanel()">Columns ▾</button>
+      <div id="col-selector" class="col-panel" hidden></div>
     </div>
 
-    <div class="ctrl-group">
-      <label class="check-label">
-        <input type="checkbox" id="favs-only" onchange="applyFilters()">
-        Favourites only
-      </label>
-    </div>
+    <label class="check-label">
+      <input type="checkbox" id="favs-only" onchange="applyFilters()">
+      Favourites only
+    </label>
 
     <div class="ctrl-group">
       <label class="ctrl-label">Libation</label>
@@ -45,7 +41,24 @@
     </div>
 
     <div id="count"></div>
+  </div>
 
+  <!-- Row 2: quick filters -->
+  <div id="quick-filters">
+    <div id="type-pills">
+      <button class="pill active" data-type="" onclick="setTypeFilter('', this)">All</button>
+      <button class="pill" data-type="2for1" onclick="setTypeFilter('2for1', this)">2-for-1</button>
+      <button class="pill" data-type="monthly" onclick="setTypeFilter('monthly', this)">Cash Sale</button>
+    </div>
+
+    <div class="pill-divider"></div>
+
+    <div id="genre-pills"></div>
+
+    <div class="col-picker" id="tags-picker">
+      <button id="tags-btn" onclick="toggleTagsPanel()">Tags ▾</button>
+      <div id="tags-selector" class="col-panel" hidden></div>
+    </div>
   </div>
 
   <div id="table-wrap">
