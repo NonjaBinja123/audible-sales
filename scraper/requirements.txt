@@ -1,0 +1,4 @@
+audible==0.10.0
+python-dotenv>=1.0.0
+curl-cffi>=0.7.0
+beautifulsoup4>=4.12.0

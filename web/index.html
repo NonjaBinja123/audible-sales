@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audible Sales</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="tos-banner" hidden>
+    <div id="tos-inner">
+      <strong>Heads up:</strong> This site displays data collected via automated access to Audible,
+      which may violate Audible/Amazon's Terms of Service. By using this site you acknowledge that
+      and assume any associated risk.
+      <button id="tos-dismiss" onclick="dismissTos()">Got it</button>
+    </div>
+  </div>
+
+  <header>
+    <h1>Audible Sales</h1>
+    <span id="last-updated"></span>
+  </header>
+
+  <div id="controls">
+    <div class="control-group">
+      <label class="control-label">Sale type</label>
+      <label class="check-label">
+        <input type="checkbox" id="type-2for1" checked onchange="applyFilters()">
+        2-for-1 credit
+      </label>
+      <label class="check-label">
+        <input type="checkbox" id="type-monthly" checked onchange="applyFilters()">
+        Monthly cash
+      </label>
+    </div>
+
+    <div class="control-group">
+      <label class="control-label" for="genre-filter">Genre</label>
+      <select id="genre-filter" onchange="applyFilters()">
+        <option value="">All genres</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <label class="control-label" for="rating-filter">
+        Min rating: <span id="rating-val">0</span>★
+      </label>
+      <input type="range" id="rating-filter" min="0" max="5" step="0.5" value="0"
+             oninput="document.getElementById('rating-val').textContent=this.value; applyFilters()">
+    </div>
+
+    <div class="control-group">
+      <label class="check-label">
+        <input type="checkbox" id="favs-only" onchange="applyFilters()">
+        Favourites only
+      </label>
+    </div>
+
+    <div class="control-group">
+      <label class="control-label">Libation export</label>
+      <input type="file" id="libation-file" accept=".csv" onchange="loadLibation(this.files[0])">
+      <button id="libation-clear" onclick="clearLibation()" hidden>Clear</button>
+    </div>
+
+    <div id="count"></div>
+  </div>
+
+  <div id="table-wrap">
+    <table id="sales-table">
+      <thead>
+        <tr>
+          <th class="col-fav">★</th>
+          <th class="col-cover"></th>
+          <th data-sort="title"      onclick="toggleSort('title')">Title</th>
+          <th data-sort="author"     onclick="toggleSort('author')">Author</th>
+          <th data-sort="narrator"   onclick="toggleSort('narrator')">Narrator</th>
+          <th data-sort="length_hours" onclick="toggleSort('length_hours')">Length</th>
+          <th data-sort="rating"     onclick="toggleSort('rating')">Rating</th>
+          <th data-sort="price"      onclick="toggleSort('price')">Sale Price</th>
+          <th data-sort="regular_price" onclick="toggleSort('regular_price')">List Price</th>
+        </tr>
+      </thead>
+      <tbody id="sales-tbody"></tbody>
+    </table>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

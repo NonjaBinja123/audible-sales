@@ -1,0 +1,9 @@
+scraper/.env
+scraper/.venv/
+scraper/__pycache__/
+scraper/*.pyc
+scraper/auth.json
+scraper/web_session.json
+*.egg-info/
+.venv/
+venv/
