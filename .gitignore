@@ -1,4 +1,7 @@
 scraper/.env
+scraper/discover*.py
+scraper/discover_out/
+scraper/sales_preview.csv
 scraper/.venv/
 scraper/__pycache__/
 scraper/*.pyc
