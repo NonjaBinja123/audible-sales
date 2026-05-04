@@ -216,13 +216,33 @@ th.filtered { background:#fff8f0; }
 td {
   padding:7px 10px;
   border-bottom:1px solid var(--border);
+  border-right:1px solid rgba(0,0,0,0.06);
   vertical-align:middle;
+  text-align:center;
   max-width:280px;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
 }
+td:last-child { border-right:none; }
 td.num { text-align:right; font-variant-numeric:tabular-nums; }
+
+/* Left-align text-heavy columns */
+td[data-col="title"], td[data-col="author"], td[data-col="narrator"], td[data-col="tags"] {
+  text-align:left;
+}
+
+/* Column dividers and alignment on headers */
+th { border-right:1px solid rgba(0,0,0,0.06); }
+th:last-child { border-right:none; }
+.th-inner { justify-content:center; }
+
+/* Left-align header label for text-heavy columns */
+th[data-col="title"] .th-inner,
+th[data-col="author"] .th-inner,
+th[data-col="narrator"] .th-inner,
+th[data-col="tags"] .th-inner { justify-content:flex-start; }
+
 
 tbody tr:nth-child(even)  { background:var(--row-alt); }
 tbody tr:hover            { background:var(--row-hover); }

@@ -330,6 +330,7 @@ function renderHeader() {
     if (!col.always && !visibleCols.has(col.key)) continue;
 
     const th = document.createElement('th');
+    th.dataset.col = col.key;
     th.style.cssText = `position:sticky;top:0;z-index:50;background:var(--surface)`;
     const active = col.filter && isFilterActive(col.dk);
     if (active) th.classList.add('filtered');
@@ -387,6 +388,7 @@ function renderBody() {
 
 function buildCell(sale, col) {
   const td = document.createElement('td');
+  td.dataset.col = col.key;
 
   switch (col.key) {
     case 'fav': {
