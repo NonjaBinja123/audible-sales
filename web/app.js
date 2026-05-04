@@ -109,10 +109,9 @@ function toggleColPanel() {
   p.hidden = !p.hidden;
   if (!p.hidden) {
     const onOut = e => {
-      if (!p.contains(e.target) && e.target.id !== 'cols-btn') {
-        p.hidden = true;
-        document.removeEventListener('mousedown', onOut);
-      }
+      if (p.contains(e.target) || e.target.closest('#cols-btn')) return;
+      p.hidden = true;
+      document.removeEventListener('mousedown', onOut);
     };
     setTimeout(() => document.addEventListener('mousedown', onOut), 0);
   }
