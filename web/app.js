@@ -723,10 +723,13 @@ function esc(s) {
 // ─── Responsive helpers ───────────────────────────────────────────────────────
 function isMobile() { return window.innerWidth <= 640; }
 
+function stickyTop() {
+  return document.getElementById('sticky-wrap').offsetHeight;
+}
+
 function updateTableHeight() {
   if (isMobile()) return;
-  const h = document.getElementById('sticky-wrap').offsetHeight;
-  document.getElementById('table-wrap').style.height = `calc(100vh - ${h}px)`;
+  document.getElementById('table-wrap').style.height = `calc(100vh - ${stickyTop()}px)`;
 }
 
 // ─── Mobile: card rendering ───────────────────────────────────────────────────
