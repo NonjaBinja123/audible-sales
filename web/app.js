@@ -62,6 +62,7 @@ async function init() {
     if (data.last_updated)
       el.textContent = 'Updated: ' + new Date(data.last_updated + 'Z').toLocaleString();
 
+    renderHeader();
     applyFilters();
   } catch(e) {
     document.getElementById('sales-tbody').innerHTML =
