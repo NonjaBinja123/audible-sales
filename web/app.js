@@ -265,9 +265,9 @@ function loadLibation(file) {
   reader.onload = e => {
     const lines  = e.target.result.split(/\r?\n/);
     const header = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
-    const asinIdx = header.findIndex(h => h === 'asin');
+    const asinIdx = header.findIndex(h => h === 'asin' || h === 'audible product id');
     if (asinIdx === -1) {
-      alert('No ASIN column found in the CSV. Make sure you\'re using a Libation export.');
+      alert('Could not find an ASIN or "Audible Product ID" column in this CSV.');
       return;
     }
     ownedAsins = new Set(
