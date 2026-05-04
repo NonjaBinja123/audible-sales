@@ -13,7 +13,7 @@ CSV_FILE  = ROOT / "data" / "sales.csv"
 AUTH_FILE = pathlib.Path(__file__).parent / "auth.json"
 
 CSV_FIELDS = [
-    "type","asin","title","author","narrator","genre",
+    "type","asin","title","author","narrator","genre","tags",
     "length_hours","rating","rating_count","price","regular_price",
     "cover_url","audible_url",
 ]
@@ -201,6 +201,58 @@ def scrape_2for1() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Tag enrichment via Audible API
+# ---------------------------------------------------------------------------
+
+def _extract_tags(product: dict) -> str:
+    tags = []
+    for ladder in (product.get("category_ladders") or []):
+        for rung in (ladder.get("ladder") or []):
+            name = rung.get("name", "").strip()
+            if name and name not in tags:
+                tags.append(name)
+    for kw in (product.get("thesaurus_subject_keywords") or []):
+        kw = kw.strip()
+        if kw and kw not in tags:
+            tags.append(kw)
+    return "; ".join(tags)
+
+
+def enrich_tags(sales: list[dict]) -> list[dict]:
+    needs = [s for s in sales if s.get("tags") is None]
+    if not needs:
+        print("  Tags already up to date.")
+        return sales
+
+    print(f"  Enriching {len(needs)} items with Audible category data...")
+    print("  (First run may take several minutes — subsequent runs only process new items)")
+
+    auth   = audible.Authenticator.from_file(AUTH_FILE)
+    by_asin = {s["asin"]: s for s in sales}
+    done   = 0
+
+    with audible.Client(auth=auth) as client:
+        for sale in needs:
+            asin = sale["asin"]
+            try:
+                resp    = client.get(
+                    f"1.0/catalog/products/{asin}",
+                    response_groups="product_attrs,product_desc",
+                )
+                product = resp.get("product", resp)
+                by_asin[asin]["tags"] = _extract_tags(product)
+            except Exception as e:
+                by_asin[asin]["tags"] = ""
+                print(f"  Warning: could not enrich {asin}: {e}", file=sys.stderr)
+            done += 1
+            if done % 100 == 0:
+                print(f"  Enriched {done}/{len(needs)}...")
+
+    print(f"  Done enriching {len(needs)} items.")
+    return list(by_asin.values())
+
+
+# ---------------------------------------------------------------------------
 # Persistence
 # ---------------------------------------------------------------------------
 
@@ -272,6 +324,9 @@ def main() -> None:
     existing = load_existing()
     merged   = merge(existing["sales"], monthly)
     merged   = merge(merged, two_for_one)   # 2for1 overwrites monthly if same ASIN
+
+    print("\n=== Enriching tags ===")
+    merged = enrich_tags(merged)
     save(merged)
     git_push()
 

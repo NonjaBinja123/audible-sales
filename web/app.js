@@ -64,6 +64,7 @@ async function init() {
 
     buildGenrePills();
     buildTagsPanel();
+    restoreLibation();
     renderHeader();
     applyFilters();
   } catch(e) {
@@ -543,6 +544,17 @@ function toggleFav(asin, btn) {
 }
 
 // ─── Libation ─────────────────────────────────────────────────────────────────
+const LIBATION_KEY = 'audible_libation';
+
+function restoreLibation() {
+  const saved = localStorage.getItem(LIBATION_KEY);
+  if (!saved) return;
+  const asins = JSON.parse(saved);
+  if (!asins.length) return;
+  ownedAsins = new Set(asins);
+  _setLibationUI(asins.length, true);
+}
+
 function loadLibation(file) {
   if (!file) return;
   const reader = new FileReader();
@@ -551,19 +563,31 @@ function loadLibation(file) {
     const header = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,'').toLowerCase());
     const idx    = header.findIndex(h => h === 'asin' || h === 'audible product id');
     if (idx === -1) { alert('No ASIN or "Audible Product ID" column found.'); return; }
-    ownedAsins = new Set(
-      lines.slice(1).map(l => (l.split(',')[idx] || '').trim().replace(/^"|"$/g,'')).filter(Boolean)
-    );
-    document.getElementById('libation-clear').hidden = false;
+    const asins = lines.slice(1)
+      .map(l => (l.split(',')[idx] || '').trim().replace(/^"|"$/g,''))
+      .filter(Boolean);
+    ownedAsins = new Set(asins);
+    localStorage.setItem(LIBATION_KEY, JSON.stringify(asins));
+    _setLibationUI(asins.length, false);
     renderBody();
   };
   reader.readAsText(file);
 }
 
+function _setLibationUI(count, fromSession) {
+  const status = document.getElementById('libation-status');
+  status.textContent = fromSession
+    ? `${count} owned (from last session)`
+    : `${count} owned titles loaded`;
+  document.getElementById('libation-clear').hidden = false;
+}
+
 function clearLibation() {
   ownedAsins = new Set();
+  localStorage.removeItem(LIBATION_KEY);
   document.getElementById('libation-file').value = '';
   document.getElementById('libation-clear').hidden = true;
+  document.getElementById('libation-status').textContent = '';
   renderBody();
 }
 
