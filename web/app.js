@@ -7,7 +7,7 @@ const BAYESIAN_M = 100;
 const COLUMNS = [
   { key:'fav',           label:'★',          always:true,  def:true,  sort:false, filter:false,   dk:null },
   { key:'cover',         label:'Cover',       always:false, def:true,  sort:false, filter:false,   dk:null },
-  { key:'title',         label:'Title',       always:true,  def:true,  sort:true,  filter:'list',  dk:'title' },
+  { key:'title',         label:'Title',       always:true,  def:true,  sort:true,  filter:'text',  dk:'title' },
   { key:'type',          label:'Type',        always:false, def:true,  sort:true,  filter:'list',  dk:'type' },
   { key:'author',        label:'Author',      always:false, def:true,  sort:true,  filter:'list',  dk:'author' },
   { key:'narrator',      label:'Narrator',    always:false, def:false, sort:true,  filter:'list',  dk:'narrator' },
@@ -41,6 +41,7 @@ let openFilterKey = null;
 let quickType        = '';
 let activeGenres     = new Set();
 let selectedTags     = new Set();
+let searchQuery      = '';
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
@@ -145,9 +146,25 @@ function buildTypePills() {
 }
 
 function setTypeFilter(type, btn) {
-  quickType = type;
-  document.querySelectorAll('#type-pills .pill').forEach(p => p.classList.remove('active'));
-  btn.classList.add('active');
+  if (type === '') {
+    // All — always activates, clears others
+    quickType = '';
+  } else if (quickType === type) {
+    // Clicking the active type again → go back to All
+    quickType = '';
+  } else {
+    quickType = type;
+  }
+  // Sync pill highlights in whichever container the btn lives in
+  const container = btn.closest('#type-pills, .sheet-pills');
+  if (container) {
+    container.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    const allBtn = container.querySelector('[onclick*="setTypeFilter(\'\'"]');
+    const activeBtn = quickType
+      ? container.querySelector(`[onclick*="setTypeFilter('${quickType}'"]`)
+      : allBtn;
+    if (activeBtn) activeBtn.classList.add('active');
+  }
   applyFilters();
 }
 
@@ -214,12 +231,21 @@ function toggleTag(tag, checked) {
 
 // ─── Filter logic ─────────────────────────────────────────────────────────────
 function isFilterActive(dk) {
+  if (dk === 'title') return searchQuery !== '';
   const f = colFilters[dk];
   if (!f) return false;
   if (f.type === 'list')  return f.excluded.size > 0;
   if (f.type === 'range') return f.min != null || f.max != null;
   if (f.type === 'price') return !f.includeCredit || f.min != null || f.max != null;
   return false;
+}
+
+function setSearch(val) {
+  searchQuery = val.trim();
+  // Sync the desktop search box if called from column panel
+  const box = document.getElementById('title-search');
+  if (box && box.value !== searchQuery) box.value = searchQuery;
+  applyFilters();
 }
 
 function applyFilters() {
@@ -241,6 +267,9 @@ function applyFilters() {
       );
       if (![...selectedTags].some(t => itemTags.has(t))) return false;
     }
+
+    // Title search
+    if (searchQuery && !(s.title || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
 
     // Column filters
     for (const [dk, f] of Object.entries(colFilters)) {
@@ -463,8 +492,9 @@ function openFilter(colKey, anchor) {
   panel.id = 'filter-panel';
   panel.className = 'filter-panel';
   if (col.filter === 'list')   buildListPanel(panel, col);
+  else if (col.filter === 'text')  buildTextPanel(panel, col);
   else if (col.filter === 'price') buildPricePanel(panel, col);
-  else                         buildRangePanel(panel, col);
+  else                             buildRangePanel(panel, col);
   document.body.appendChild(panel);
 
   const r = anchor.getBoundingClientRect();
@@ -488,6 +518,20 @@ function closeFilter() {
   document.getElementById('filter-panel')?.remove();
   document.removeEventListener('mousedown', outsideClickHandler);
   openFilterKey = null;
+}
+
+function buildTextPanel(panel, col) {
+  panel.innerHTML = `
+    <div class="fp-head"><strong>${col.label} search</strong></div>
+    <div style="padding:10px">
+      <input type="search" id="text-fp-input" value="${esc(searchQuery)}"
+             placeholder="Type to search…"
+             autofocus
+             style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px;outline:none"
+             oninput="setSearch(this.value)">
+    </div>
+    <button class="fp-clear-btn" onclick="setSearch('');document.getElementById('text-fp-input').value=''">Clear</button>`;
+  setTimeout(() => panel.querySelector('input')?.focus(), 50);
 }
 
 function buildListPanel(panel, col) {
@@ -843,6 +887,13 @@ function buildFilterSheet() {
     </label>`).join('');
 
   document.getElementById('sheet-body').innerHTML = `
+    <div class="sheet-section">
+      <div class="sheet-label">Search title</div>
+      <input type="search" value="${esc(searchQuery)}" placeholder="Type to search…"
+             style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:14px"
+             oninput="setSearch(this.value)">
+    </div>
+
     <div class="sheet-section">
       <div class="sheet-label">Sort by</div>
       <select class="sheet-select" onchange="setMobileSort(this.value)">${sortOptions}</select>
