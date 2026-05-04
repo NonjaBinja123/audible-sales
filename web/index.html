@@ -35,7 +35,8 @@
       </label>
       <div class="ctrl-group">
         <label class="ctrl-label">Libation</label>
-        <input type="file" id="libation-file" accept=".csv" onchange="loadLibation(this.files[0])">
+        <input type="file" id="libation-file" accept=".csv" onchange="loadLibation(this.files[0])"
+             title="Load a Libation CSV export to mark books you already own. The file is read locally — nothing is uploaded.">
         <span id="libation-status" class="libation-status"></span>
         <button id="libation-clear" onclick="clearLibation()" hidden>✕ Clear</button>
       </div>
@@ -47,6 +48,7 @@
       <div class="pill-divider"></div>
       <div id="type-pills"></div>
       <div class="pill-divider"></div>
+      <div id="owned-pills" hidden></div>
       <div id="genre-pills"></div>
       <div class="col-picker" id="tags-picker">
         <button id="tags-btn" onclick="toggleTagsPanel()">Tags ▾</button>

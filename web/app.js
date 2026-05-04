@@ -20,6 +20,7 @@ const COLUMNS = [
   { key:'weighted',      label:'Weighted',    always:false, def:false, sort:true,  filter:'range', dk:'weighted' },
   { key:'price',         label:'Sale Price',  always:false, def:true,  sort:true,  filter:'price', dk:'price' },
   { key:'regular_price', label:'List Price',  always:false, def:true,  sort:true,  filter:'range', dk:'regular_price' },
+  { key:'owned',         label:'Owned',       always:false, def:false, sort:true,  filter:false,   dk:'owned' },
   { key:'asin',          label:'ASIN',        always:false, def:false, sort:false, filter:false,   dk:'asin' },
 ];
 
@@ -42,6 +43,7 @@ let quickType        = '';
 let activeGenres     = new Set();
 let selectedTags     = new Set();
 let searchQuery      = '';
+let ownedFilter      = ''; // '' | 'owned' | 'unowned'
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
@@ -168,6 +170,13 @@ function setTypeFilter(type, btn) {
   applyFilters();
 }
 
+function setOwnedFilter(val, btn) {
+  ownedFilter = ownedFilter === val ? '' : val;
+  document.querySelectorAll('.owned-pill').forEach(p => p.classList.remove('active'));
+  if (ownedFilter) btn.classList.add('active');
+  applyFilters();
+}
+
 function buildGenrePills() {
   const genres = [...new Set(allSales.map(s => s.genre).filter(Boolean))].sort();
   const container = document.getElementById('genre-pills');
@@ -268,6 +277,10 @@ function applyFilters() {
       if (![...selectedTags].some(t => itemTags.has(t))) return false;
     }
 
+    // Owned filter
+    if (ownedFilter === 'owned'   && !ownedAsins.has(s.asin)) return false;
+    if (ownedFilter === 'unowned' &&  ownedAsins.has(s.asin)) return false;
+
     // Title search
     if (searchQuery && !(s.title || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
 
@@ -311,6 +324,11 @@ function sortNorm(v) {
 
 function applySort() {
   filtered.sort((a, b) => {
+    if (sortKey === 'owned') {
+      const oa = ownedAsins.has(a.asin) ? 1 : 0;
+      const ob = ownedAsins.has(b.asin) ? 1 : 0;
+      return sortAsc ? oa - ob : ob - oa;
+    }
     let va = sortNorm(a[sortKey]), vb = sortNorm(b[sortKey]);
     if (va == null && vb == null) return 0;
     if (va == null) return  sortAsc ?  1 : -1;
@@ -472,6 +490,12 @@ function buildCell(sale, col) {
     case 'tags':
       td.textContent = sale.tags || '';
       td.className = 'tags-cell'; break;
+    case 'owned': {
+      td.textContent = ownedAsins.has(sale.asin) ? '✓' : '';
+      td.style.color = 'var(--green)';
+      td.style.fontWeight = '700';
+      break;
+    }
     default:
       td.textContent = sale[col.dk] ?? '';
   }
@@ -700,19 +724,26 @@ function loadLibation(file) {
 }
 
 function _setLibationUI(count, fromSession) {
-  const status = document.getElementById('libation-status');
-  status.textContent = fromSession
-    ? `${count} owned (from last session)`
-    : `${count} owned titles loaded`;
+  document.getElementById('libation-status').textContent = fromSession
+    ? `${count} owned (session)`
+    : `${count} owned loaded`;
   document.getElementById('libation-clear').hidden = false;
+
+  const pills = document.getElementById('owned-pills');
+  pills.hidden = false;
+  pills.innerHTML =
+    `<button class="pill owned-pill" onclick="setOwnedFilter('owned',this)">Owned</button>` +
+    `<button class="pill owned-pill" onclick="setOwnedFilter('unowned',this)">Not Owned</button>`;
 }
 
 function clearLibation() {
   ownedAsins = new Set();
+  ownedFilter = '';
   localStorage.removeItem(LIBATION_KEY);
   document.getElementById('libation-file').value = '';
   document.getElementById('libation-clear').hidden = true;
   document.getElementById('libation-status').textContent = '';
+  document.getElementById('owned-pills').hidden = true;
   renderBody();
 }
 
@@ -875,6 +906,7 @@ function buildFilterSheet() {
     ['weighted',     'Weighted (high–low)'],
     ['length_hours', 'Length (short–long)'],
     ['price',        'Price (low–high)'],
+    ['owned',        'Owned first'],
   ].map(([val, label]) =>
     `<option value="${val}" ${sortKey === val ? 'selected' : ''}>${label}</option>`
   ).join('');

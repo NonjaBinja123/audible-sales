@@ -156,6 +156,7 @@ input[type="file"] { font-size:12px; }
 }
 
 #tags-picker { margin-left:auto; }
+#tags-picker .col-panel { left:auto; right:0; }
 #tags-btn { padding:4px 12px; border-radius:20px; border:1px solid var(--border); background:var(--bg); font-size:12px; font-weight:600; cursor:pointer; }
 #tags-btn:hover, #tags-btn.active { border-color:var(--orange); color:var(--orange); }
 #tags-btn.active { background:#fff8f0; }
@@ -218,19 +219,23 @@ td {
   border-bottom:1px solid var(--border);
   border-right:1px solid rgba(0,0,0,0.06);
   vertical-align:middle;
-  text-align:center;
+  text-align:center !important;
   max-width:280px;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
 }
 td:last-child { border-right:none; }
-td.num { text-align:right; font-variant-numeric:tabular-nums; }
+td.num { text-align:right !important; font-variant-numeric:tabular-nums; }
 
 /* Left-align text-heavy columns */
 td[data-col="title"], td[data-col="author"], td[data-col="narrator"], td[data-col="tags"] {
-  text-align:left;
+  text-align:left !important;
 }
+
+/* Center block-level content in cells */
+.cover-thumb { margin:0 auto; }
+.star-btn    { display:block; margin:0 auto; }
 
 /* Column dividers and alignment on headers */
 th { border-right:1px solid rgba(0,0,0,0.06); }
