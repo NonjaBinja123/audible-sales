@@ -323,13 +323,15 @@ function applySort() {
 
 // ─── Render ───────────────────────────────────────────────────────────────────
 function renderHeader() {
-  const tr = document.querySelector('#sales-table thead tr');
-  tr.innerHTML = '';
+  const tr      = document.querySelector('#sales-table thead tr');
+  const stickyH = stickyTop();
+  tr.innerHTML  = '';
 
   for (const col of COLUMNS) {
     if (!col.always && !visibleCols.has(col.key)) continue;
 
-    const th     = document.createElement('th');
+    const th = document.createElement('th');
+    th.style.cssText = `position:sticky;top:${stickyH}px;z-index:50;background:var(--surface)`;
     const active = col.filter && isFilterActive(col.dk);
     if (active) th.classList.add('filtered');
 

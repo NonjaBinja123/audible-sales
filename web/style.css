@@ -171,13 +171,8 @@ input[type="file"] { font-size:12px; }
 /* ── Table ── */
 #sales-table { width:100%; border-collapse:collapse; background:var(--surface); }
 
-thead tr {
-  background:var(--surface);
-  border-bottom:2px solid var(--border);
-  position:sticky;
-  top:0;
-  z-index:50;
-}
+thead tr { border-bottom:2px solid var(--border); }
+/* sticky applied per-th in renderHeader() to keep column widths in table layout */
 
 th { padding:0; white-space:nowrap; }
 th.filtered { background:#fff8f0; }
