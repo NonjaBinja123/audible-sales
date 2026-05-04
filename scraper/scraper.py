@@ -250,39 +250,102 @@ def scrape_monthly() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# 2-for-1 promo (auth required)
+# Special promos — dynamic discovery (auth required)
 # ---------------------------------------------------------------------------
 
-def scrape_2for1() -> list[dict]:
+def _slug_to_type(slug: str) -> str:
+    """Derive a sale type string from a URL slug like '2for1' or 'cash-sale'."""
+    slug = slug.lower()
+    if any(x in slug for x in ('2for1', '2-for-1', 'bogo', 'buy2')):
+        return '2for1'
+    if 'cash' in slug:
+        return 'cash'
+    if 'daily' in slug:
+        return 'daily'
+    # Normalize slug: strip non-alphanumeric, truncate
+    return re.sub(r'[^a-z0-9]', '', slug)[:20] or 'promo'
+
+
+def _discover_promo_paths(session: curl.Session) -> dict[str, str]:
+    """
+    Scrape Audible's home + deals pages to find active /special-promo/ URLs.
+    Returns {promo_path: sale_type}, e.g. {'/special-promo/2for1': '2for1'}.
+    """
+    found: dict[str, str] = {}
+    check = [
+        f"{BASE}/?{OVR}",
+        f"{BASE}/ep/audiobook-deals?{OVR}",
+        f"{BASE}/ep/deals-and-sales?{OVR}",
+    ]
+    for url in check:
+        try:
+            r = session.get(url, timeout=20)
+            paths = re.findall(r'href="(/special-promo/[^/"?]+)', r.text)
+            for path in paths:
+                if path not in found:
+                    slug = path.split('/')[-1]
+                    found[path] = _slug_to_type(slug)
+        except Exception as e:
+            print(f"  Discovery error on {url}: {e}", file=sys.stderr)
+    return found
+
+
+def _scrape_promo_path(session: curl.Session, path: str, sale_type: str) -> list[dict]:
+    """Scrape a single special promo, handling category-node pages if present."""
+    promo_url = f"{BASE}{path}?{OVR}"
+    r = session.get(promo_url, timeout=20)
+    if r.status_code != 200:
+        print(f"  {path} returned {r.status_code} — may require auth or be inactive",
+              file=sys.stderr)
+        return []
+
+    # Look for category-node sub-pages (e.g. /special-promo/2for1/cat?node=...)
+    node_pattern = re.escape(path) + r'/cat\?node=(\d+)'
+    nodes = list(dict.fromkeys(re.findall(node_pattern, r.text)))
+
+    items: list[dict] = []
+    seen: set[str] = set()
+
+    if nodes:
+        for node in nodes:
+            node_url = f"{BASE}{path}/cat?node={node}&{OVR}"
+            print(f"    Node {node}:")
+            for item in _scrape_listing(session, node_url, sale_type):
+                if item["asin"] not in seen:
+                    items.append(item)
+                    seen.add(item["asin"])
+    else:
+        # Flat promo page — scrape directly
+        for item in _scrape_listing(session, promo_url, sale_type):
+            if item["asin"] not in seen:
+                items.append(item)
+                seen.add(item["asin"])
+
+    return items
+
+
+def scrape_promos() -> list[dict]:
+    """Discover and scrape all currently active special promotional sales."""
     cookies = _auth_cookies()
     session = _make_session(cookies)
 
-    # Fetch main promo page to discover category nodes
-    r = session.get(f"{BASE}/special-promo/2for1?{OVR}", timeout=20)
-    if r.status_code != 200:
-        print(f"  2for1 page returned {r.status_code}", file=sys.stderr)
-        return []
+    print("  Discovering active promotions...")
+    promo_paths = _discover_promo_paths(session)
 
-    nodes = list(dict.fromkeys(
-        re.findall(r'/special-promo/2for1/cat\?node=(\d+)', r.text)
-    ))
-    print(f"  Found {len(nodes)} category nodes")
-
-    if not nodes:
-        print("  No nodes found — sale may not be active or auth failed", file=sys.stderr)
+    if not promo_paths:
+        print("  No special promotions found on hub pages.")
         return []
 
     all_items: list[dict] = []
     seen: set[str] = set()
 
-    for node in nodes:
-        url = f"{BASE}/special-promo/2for1/cat?node={node}&{OVR}"
-        print(f"  Node {node}:")
-        items = _scrape_listing(session, url, "2for1")
-        for item in items:
+    for path, sale_type in promo_paths.items():
+        print(f"  Promo: {path}  →  type={sale_type!r}")
+        for item in _scrape_promo_path(session, path, sale_type):
             if item["asin"] not in seen:
                 all_items.append(item)
                 seen.add(item["asin"])
+        print(f"    Subtotal: {len(all_items)}")
 
     return all_items
 
@@ -371,8 +434,11 @@ def save(sales: list[dict]) -> None:
         writer.writeheader()
         writer.writerows(sales)
 
-    print(f"Wrote {len(sales)} items ({sum(1 for s in sales if s['type']=='2for1')} 2for1, "
-          f"{sum(1 for s in sales if s['type']=='monthly')} monthly)")
+    by_type = {}
+    for s in sales:
+        by_type[s['type']] = by_type.get(s['type'], 0) + 1
+    summary = ", ".join(f"{v} {k}" for k, v in sorted(by_type.items()))
+    print(f"Wrote {len(sales)} items ({summary})")
 
 
 # ---------------------------------------------------------------------------
@@ -399,18 +465,19 @@ def main() -> None:
     monthly = scrape_monthly()
     print(f"Monthly total: {len(monthly)}")
 
-    print("\n=== 2-for-1 promo ===")
-    two_for_one = scrape_2for1()
-    print(f"2-for-1 total: {len(two_for_one)}")
+    print("\n=== Special promotions (auto-discovered) ===")
+    promos = scrape_promos()
+    print(f"Promos total: {len(promos)}")
 
-    fresh = monthly + two_for_one
+    fresh = monthly + promos
     if not fresh:
         print("Nothing scraped.")
         return
 
     existing = load_existing()
+    # Monthly first, then promos — promos overwrite monthly if same ASIN
     merged   = merge(existing["sales"], monthly)
-    merged   = merge(merged, two_for_one)   # 2for1 overwrites monthly if same ASIN
+    merged   = merge(merged, promos)
 
     print("\n=== Enriching tags ===")
     merged = enrich_tags(merged)
