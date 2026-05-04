@@ -621,7 +621,7 @@ function fpPriceClear() {
 function fpSearch(input) {
   const q = input.value.toLowerCase();
   input.closest('.filter-panel').querySelectorAll('.fp-item').forEach(el => {
-    el.hidden = !!q && !el.textContent.toLowerCase().includes(q);
+    el.style.display = (q && !el.textContent.toLowerCase().includes(q)) ? 'none' : '';
   });
 }
 
