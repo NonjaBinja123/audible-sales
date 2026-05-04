@@ -18,7 +18,7 @@ const COLUMNS = [
   { key:'rating_count',  label:'# Ratings',  always:false, def:true,  sort:true,  filter:'range', dk:'rating_count' },
   { key:'bayesian',      label:'Bayesian',    always:false, def:false, sort:true,  filter:'range', dk:'bayesian' },
   { key:'weighted',      label:'Weighted',    always:false, def:false, sort:true,  filter:'range', dk:'weighted' },
-  { key:'price',         label:'Sale Price',  always:false, def:true,  sort:true,  filter:'range', dk:'price' },
+  { key:'price',         label:'Sale Price',  always:false, def:true,  sort:true,  filter:'price', dk:'price' },
   { key:'regular_price', label:'List Price',  always:false, def:true,  sort:true,  filter:'range', dk:'regular_price' },
   { key:'asin',          label:'ASIN',        always:false, def:false, sort:false, filter:false,   dk:'asin' },
 ];
@@ -199,6 +199,7 @@ function isFilterActive(dk) {
   if (!f) return false;
   if (f.type === 'list')  return f.excluded.size > 0;
   if (f.type === 'range') return f.min != null || f.max != null;
+  if (f.type === 'price') return !f.includeCredit || f.min != null || f.max != null;
   return false;
 }
 
@@ -232,6 +233,13 @@ function applyFilters() {
         const nv = s[dk] == null ? null : +s[dk];
         if (f.min != null && (nv == null || nv < f.min)) return false;
         if (f.max != null && (nv == null || nv > f.max)) return false;
+      }
+      if (f.type === 'price') {
+        if (!f.includeCredit && s.type === '2for1') return false;
+        if (s.price != null) {
+          if (f.min != null && s.price < f.min) return false;
+          if (f.max != null && s.price > f.max) return false;
+        }
       }
     }
     return true;
@@ -434,7 +442,9 @@ function openFilter(colKey, anchor) {
   const panel = document.createElement('div');
   panel.id = 'filter-panel';
   panel.className = 'filter-panel';
-  col.filter === 'list' ? buildListPanel(panel, col) : buildRangePanel(panel, col);
+  if (col.filter === 'list')   buildListPanel(panel, col);
+  else if (col.filter === 'price') buildPricePanel(panel, col);
+  else                         buildRangePanel(panel, col);
   document.body.appendChild(panel);
 
   const r = anchor.getBoundingClientRect();
@@ -500,6 +510,48 @@ function buildRangePanel(panel, col) {
       <label>Max<input type="number" id="rfmax" step="${step}" placeholder="${+hi.toFixed(2)}" value="${cur.max ?? ''}" oninput="fpRange('${dk}')"></label>
     </div>
     <button class="fp-clear-btn" onclick="fpClearRange('${dk}')">Clear</button>`;
+}
+
+function buildPricePanel(panel, col) {
+  const cur   = colFilters['price'] || { includeCredit: true };
+  const vals  = allSales.map(s => s.price).filter(v => v != null).map(Number);
+  const lo    = vals.length ? Math.min(...vals) : 0;
+  const hi    = vals.length ? Math.max(...vals) : 0;
+  const chk   = cur.includeCredit !== false ? 'checked' : '';
+
+  panel.innerHTML = `
+    <div class="fp-head"><strong>Sale Price</strong></div>
+    <label class="fp-item" style="padding:8px 10px;border-bottom:1px solid var(--border)">
+      <input type="checkbox" id="pf-credit" ${chk} onchange="fpPriceCredit(this.checked)">
+      1-credit (2-for-1) sales
+    </label>
+    <div class="fp-range" style="padding-top:8px">
+      <small style="color:var(--muted);padding:0 10px">Cash price range:</small>
+      <label>Min<input type="number" id="rfmin" step="0.01" placeholder="${+lo.toFixed(2)}" value="${cur.min ?? ''}" oninput="fpPriceRange()"></label>
+      <label>Max<input type="number" id="rfmax" step="0.01" placeholder="${+hi.toFixed(2)}" value="${cur.max ?? ''}" oninput="fpPriceRange()"></label>
+    </div>
+    <button class="fp-clear-btn" onclick="fpPriceClear()">Clear</button>`;
+}
+
+function fpPriceCredit(checked) {
+  if (!colFilters['price']) colFilters['price'] = { type: 'price', includeCredit: true };
+  colFilters['price'].includeCredit = checked;
+  renderHeader(); applyFilters();
+}
+
+function fpPriceRange() {
+  const min = document.getElementById('rfmin')?.value;
+  const max = document.getElementById('rfmax')?.value;
+  if (!colFilters['price']) colFilters['price'] = { type: 'price', includeCredit: true };
+  colFilters['price'].type = 'price';
+  colFilters['price'].min  = min !== '' ? +min : null;
+  colFilters['price'].max  = max !== '' ? +max : null;
+  renderHeader(); applyFilters();
+}
+
+function fpPriceClear() {
+  delete colFilters['price'];
+  closeFilter(); renderHeader(); applyFilters();
 }
 
 function fpSearch(input) {
