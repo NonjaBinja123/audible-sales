@@ -604,11 +604,9 @@ function esc(s) {
 
 // ─── Sticky offsets ───────────────────────────────────────────────────────────
 function updateStickyOffsets() {
-  const controlsH    = document.getElementById('controls').offsetHeight;
-  const quickH       = document.getElementById('quick-filters').offsetHeight;
-  document.getElementById('quick-filters').style.top = controlsH + 'px';
+  const h = document.getElementById('sticky-wrap').offsetHeight;
   const theadRow = document.querySelector('#sales-table thead tr');
-  if (theadRow) theadRow.style.top = (controlsH + quickH) + 'px';
+  if (theadRow) theadRow.style.top = h + 'px';
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
