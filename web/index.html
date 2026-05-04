@@ -17,55 +17,74 @@
     </div>
   </div>
 
-  <header>
+  <!-- ── DESKTOP ─────────────────────────────────────── -->
+  <header id="desktop-header">
     <h1>Audible Sales</h1>
     <span id="last-updated"></span>
   </header>
 
   <div id="sticky-wrap">
-
-  <!-- Row 1: meta controls -->
-  <div id="controls">
-    <div class="col-picker">
-      <button id="cols-btn" onclick="toggleColPanel()">Columns ▾</button>
-      <div id="col-selector" class="col-panel" hidden></div>
+    <div id="controls">
+      <div class="col-picker">
+        <button id="cols-btn" onclick="toggleColPanel()">Columns ▾</button>
+        <div id="col-selector" class="col-panel" hidden></div>
+      </div>
+      <label class="check-label">
+        <input type="checkbox" id="favs-only" onchange="applyFilters()">
+        Favourites only
+      </label>
+      <div class="ctrl-group">
+        <label class="ctrl-label">Libation</label>
+        <input type="file" id="libation-file" accept=".csv" onchange="loadLibation(this.files[0])">
+        <span id="libation-status" class="libation-status"></span>
+        <button id="libation-clear" onclick="clearLibation()" hidden>✕ Clear</button>
+      </div>
+      <div id="count"></div>
     </div>
-
-    <label class="check-label">
-      <input type="checkbox" id="favs-only" onchange="applyFilters()">
-      Favourites only
-    </label>
-
-    <div class="ctrl-group">
-      <label class="ctrl-label">Libation</label>
-      <input type="file" id="libation-file" accept=".csv" onchange="loadLibation(this.files[0])">
-      <span id="libation-status" class="libation-status"></span>
-      <button id="libation-clear" onclick="clearLibation()" hidden>✕ Clear</button>
+    <div id="quick-filters">
+      <div id="type-pills"></div>
+      <div class="pill-divider"></div>
+      <div id="genre-pills"></div>
+      <div class="col-picker" id="tags-picker">
+        <button id="tags-btn" onclick="toggleTagsPanel()">Tags ▾</button>
+        <div id="tags-selector" class="col-panel" hidden></div>
+      </div>
     </div>
-
-    <div id="count"></div>
   </div>
-
-  <!-- Row 2: quick filters -->
-  <div id="quick-filters">
-    <div id="type-pills"></div>
-
-    <div class="pill-divider"></div>
-
-    <div id="genre-pills"></div>
-
-    <div class="col-picker" id="tags-picker">
-      <button id="tags-btn" onclick="toggleTagsPanel()">Tags ▾</button>
-      <div id="tags-selector" class="col-panel" hidden></div>
-    </div>
-  </div><!-- end quick-filters -->
-  </div><!-- end sticky-wrap -->
 
   <div id="table-wrap">
     <table id="sales-table">
       <thead><tr></tr></thead>
       <tbody id="sales-tbody"></tbody>
     </table>
+  </div>
+
+  <!-- ── MOBILE ──────────────────────────────────────── -->
+  <div id="mobile-bar">
+    <div id="mobile-header">
+      <span class="mobile-title">Audible Sales</span>
+      <span id="mobile-updated"></span>
+    </div>
+    <div id="mobile-controls">
+      <button id="filter-sheet-btn" onclick="openFilterSheet()">⚙ Filters</button>
+      <span id="mobile-count"></span>
+    </div>
+  </div>
+
+  <div id="cards-view"></div>
+
+  <!-- Filter bottom sheet -->
+  <div id="sheet-overlay" onclick="closeFilterSheet()"></div>
+  <div id="filter-sheet">
+    <div id="sheet-handle"></div>
+    <div id="sheet-header">
+      <span>Filters</span>
+      <button id="sheet-reset" onclick="resetFilters()">Reset</button>
+    </div>
+    <div id="sheet-body"></div>
+    <div id="sheet-footer">
+      <button id="sheet-apply" onclick="closeFilterSheet()">Done</button>
+    </div>
   </div>
 
   <script src="app.js"></script>

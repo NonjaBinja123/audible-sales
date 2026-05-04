@@ -58,9 +58,9 @@ async function init() {
       weighted: computeWeighted(s.rating, s.rating_count),
     }));
 
-    const el = document.getElementById('last-updated');
-    if (data.last_updated)
-      el.textContent = 'Updated: ' + new Date(data.last_updated + 'Z').toLocaleString();
+    const ts = data.last_updated ? 'Updated: ' + new Date(data.last_updated + 'Z').toLocaleString() : '';
+    document.getElementById('last-updated').textContent  = ts;
+    document.getElementById('mobile-updated').textContent = ts;
 
     buildTypePills();
     buildGenrePills();
@@ -331,6 +331,8 @@ function renderHeader() {
 }
 
 function renderBody() {
+  if (isMobile()) { renderCards(); return; }
+
   const tbody = document.getElementById('sales-tbody');
   document.getElementById('count').textContent =
     filtered.length.toLocaleString() + ' title' + (filtered.length !== 1 ? 's' : '');
@@ -672,12 +674,221 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ─── Table height ─────────────────────────────────────────────────────────────
+// ─── Responsive helpers ───────────────────────────────────────────────────────
+function isMobile() { return window.innerWidth <= 640; }
+
 function updateTableHeight() {
+  if (isMobile()) return;
   const h = document.getElementById('sticky-wrap').offsetHeight;
   document.getElementById('table-wrap').style.height = `calc(100vh - ${h}px)`;
 }
 
+// ─── Mobile: card rendering ───────────────────────────────────────────────────
+
+function renderCards() {
+  const container = document.getElementById('cards-view');
+  const countEl   = document.getElementById('mobile-count');
+  countEl.textContent = filtered.length.toLocaleString() + ' title' + (filtered.length !== 1 ? 's' : '');
+
+  if (!filtered.length) {
+    container.innerHTML = '<p class="empty-msg">No results match your filters.</p>';
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  for (const sale of filtered) {
+    const card = document.createElement('a');
+    card.href      = sale.audible_url;
+    card.target    = '_blank';
+    card.rel       = 'noopener noreferrer';
+    card.className = 'book-card' + (ownedAsins.has(sale.asin) ? ' owned' : '');
+
+    // Cover
+    const coverDiv = document.createElement('div');
+    coverDiv.className = 'card-cover';
+    if (sale.cover_url) {
+      const img = document.createElement('img');
+      img.src = sale.cover_url; img.alt = ''; img.loading = 'lazy';
+      coverDiv.appendChild(img);
+    }
+
+    // Details
+    const det = document.createElement('div');
+    det.className = 'card-details';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'card-title';
+    titleEl.textContent = sale.title || '';
+
+    const authorEl = document.createElement('div');
+    authorEl.className = 'card-meta';
+    authorEl.textContent = sale.author || '';
+
+    const narratorEl = document.createElement('div');
+    narratorEl.className = 'card-meta card-narrator';
+    narratorEl.textContent = sale.narrator || '';
+
+    const footer = document.createElement('div');
+    footer.className = 'card-footer';
+
+    // Type badge
+    const badge = document.createElement('span');
+    badge.className = `badge badge-${sale.type}`;
+    badge.textContent = TYPE_LABELS[sale.type] || sale.type;
+    footer.appendChild(badge);
+
+    // Price
+    if (sale.type === '2for1') {
+      const cp = document.createElement('span');
+      cp.className = 'card-price credit';
+      cp.textContent = '1 credit';
+      footer.appendChild(cp);
+    } else if (sale.price != null) {
+      const cp = document.createElement('span');
+      cp.className = 'card-price';
+      cp.textContent = '$' + sale.price.toFixed(2);
+      footer.appendChild(cp);
+    }
+
+    // Rating
+    if (sale.rating != null) {
+      const r = document.createElement('span');
+      r.className = 'card-rating';
+      r.textContent = '★ ' + sale.rating.toFixed(1);
+      footer.appendChild(r);
+    }
+
+    // Owned badge
+    if (ownedAsins.has(sale.asin)) {
+      const ob = document.createElement('span');
+      ob.className = 'owned-badge'; ob.textContent = 'Owned';
+      footer.appendChild(ob);
+    }
+
+    // Fav (stop propagation so tap doesn't open Audible)
+    const favBtn = document.createElement('button');
+    favBtn.className = 'star-btn' + (favorites.has(sale.asin) ? ' active' : '');
+    favBtn.textContent = '★';
+    favBtn.onclick = e => { e.preventDefault(); e.stopPropagation(); toggleFav(sale.asin, favBtn); };
+    footer.appendChild(favBtn);
+
+    det.appendChild(titleEl);
+    det.appendChild(authorEl);
+    det.appendChild(narratorEl);
+    det.appendChild(footer);
+    card.appendChild(coverDiv);
+    card.appendChild(det);
+    frag.appendChild(card);
+  }
+  container.replaceChildren(frag);
+}
+
+// ─── Mobile: filter sheet ─────────────────────────────────────────────────────
+
+function openFilterSheet() {
+  buildFilterSheet();
+  document.getElementById('filter-sheet').classList.add('open');
+  document.getElementById('sheet-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeFilterSheet() {
+  document.getElementById('filter-sheet').classList.remove('open');
+  document.getElementById('sheet-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function resetFilters() {
+  quickType = '';
+  activeGenres.clear();
+  selectedTags.clear();
+  colFilters = {};
+  document.getElementById('favs-only').checked = false;
+  buildFilterSheet();
+  applyFilters();
+}
+
+function buildFilterSheet() {
+  const types = [...new Set(allSales.map(s => s.type).filter(Boolean))].sort();
+  const allTags = new Set();
+  allSales.forEach(s => {
+    if (s.tags) s.tags.split(';').forEach(t => { const v = t.trim(); if (v) allTags.add(v); });
+  });
+  const ratingFilter = colFilters['rating'] || {};
+  const favsOnly     = document.getElementById('favs-only').checked;
+
+  const sortOptions = [
+    ['title',        'Title A–Z'],
+    ['rating',       'Rating (high–low)'],
+    ['rating_count', '# Ratings (high–low)'],
+    ['bayesian',     'Bayesian (high–low)'],
+    ['weighted',     'Weighted (high–low)'],
+    ['length_hours', 'Length (short–long)'],
+    ['price',        'Price (low–high)'],
+  ].map(([val, label]) =>
+    `<option value="${val}" ${sortKey === val ? 'selected' : ''}>${label}</option>`
+  ).join('');
+
+  const typePills = ['', ...types].map(t => {
+    const active = quickType === t ? 'active' : '';
+    const label  = t ? (TYPE_LABELS[t] || t) : 'All';
+    return `<button class="pill ${active}" onclick="setTypeFilter('${esc(t)}',this)">${label}</button>`;
+  }).join('');
+
+  const tagItems = [...allTags].sort().map(t => `
+    <label class="sheet-check">
+      <input type="checkbox" value="${esc(t)}" ${selectedTags.has(t) ? 'checked' : ''}
+             onchange="toggleTag('${esc(t)}',this.checked)">
+      ${esc(t)}
+    </label>`).join('');
+
+  document.getElementById('sheet-body').innerHTML = `
+    <div class="sheet-section">
+      <div class="sheet-label">Sort by</div>
+      <select class="sheet-select" onchange="setMobileSort(this.value)">${sortOptions}</select>
+    </div>
+
+    <div class="sheet-section">
+      <div class="sheet-label">Sale type</div>
+      <div class="sheet-pills">${typePills}</div>
+    </div>
+
+    <div class="sheet-section">
+      <div class="sheet-label">Min rating: <span id="sheet-rating-val">${ratingFilter.min ?? 0}</span>★</div>
+      <input type="range" class="sheet-range" min="0" max="5" step="0.5"
+             value="${ratingFilter.min ?? 0}"
+             oninput="document.getElementById('sheet-rating-val').textContent=this.value;
+                      colFilters['rating']={type:'range',min:+this.value||null,max:null};
+                      applyFilters()">
+    </div>
+
+    <label class="sheet-check">
+      <input type="checkbox" ${favsOnly ? 'checked' : ''}
+             onchange="document.getElementById('favs-only').checked=this.checked; applyFilters()">
+      Favourites only
+    </label>
+
+    ${allTags.size ? `
+    <div class="sheet-section">
+      <div class="sheet-label">Tags</div>
+      <div class="sheet-tag-list">${tagItems}</div>
+    </div>` : ''}
+
+    <div class="sheet-section">
+      <div class="sheet-label">Libation (owned books)</div>
+      <input type="file" accept=".csv" onchange="loadLibation(this.files[0])">
+      <div class="libation-status" style="margin-top:4px">${document.getElementById('libation-status').textContent}</div>
+    </div>
+  `;
+}
+
+function setMobileSort(key) {
+  const descFirst = ['rating', 'bayesian', 'weighted', 'rating_count'];
+  sortKey  = key;
+  sortAsc  = !descFirst.includes(key);
+  applySort();
+}
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 init();
-window.addEventListener('resize', updateTableHeight);
+window.addEventListener('resize', () => { updateTableHeight(); renderBody(); });
