@@ -65,6 +65,7 @@ async function init() {
     buildGenrePills();
     buildTagsPanel();
     restoreLibation();
+    updateTableHeight();
     renderHeader();
     applyFilters();
   } catch(e) {
@@ -276,7 +277,6 @@ function applySort() {
 // ─── Render ───────────────────────────────────────────────────────────────────
 function renderHeader() {
   const tr = document.querySelector('#sales-table thead tr');
-  tr.style.top = stickyTop() + 'px';
   tr.innerHTML = '';
 
   for (const col of COLUMNS) {
@@ -654,11 +654,12 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ─── Sticky offsets ───────────────────────────────────────────────────────────
-function stickyTop() {
-  return document.getElementById('sticky-wrap').offsetHeight;
+// ─── Table height ─────────────────────────────────────────────────────────────
+function updateTableHeight() {
+  const h = document.getElementById('sticky-wrap').offsetHeight;
+  document.getElementById('table-wrap').style.height = `calc(100vh - ${h}px)`;
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 init();
-window.addEventListener('resize', renderHeader);
+window.addEventListener('resize', updateTableHeight);
