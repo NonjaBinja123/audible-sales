@@ -40,6 +40,19 @@
         <span id="libation-status" class="libation-status"></span>
         <button id="libation-clear" onclick="clearLibation()" hidden>✕ Clear</button>
       </div>
+      <div class="ctrl-group">
+        <label class="ctrl-label" for="region-select">Region</label>
+        <select id="region-select" class="region-select" onchange="setRegion(this.value)"
+                title="Your Audible store — changes all links so they open correctly in your app">
+          <option value="us">🇺🇸 US</option>
+          <option value="ca">🇨🇦 Canada</option>
+          <option value="uk">🇬🇧 UK</option>
+          <option value="au">🇦🇺 Australia</option>
+          <option value="de">🇩🇪 Germany</option>
+          <option value="fr">🇫🇷 France</option>
+          <option value="jp">🇯🇵 Japan</option>
+        </select>
+      </div>
       <div id="count"></div>
     </div>
     <div id="quick-filters">

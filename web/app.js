@@ -3,6 +3,29 @@
 const DATA_URL   = '../data/sales.json';
 const BAYESIAN_M = 100;
 
+const REGIONS = {
+  us: 'www.audible.com',
+  ca: 'www.audible.ca',
+  uk: 'www.audible.co.uk',
+  au: 'www.audible.com.au',
+  de: 'www.audible.de',
+  fr: 'www.audible.fr',
+  jp: 'www.audible.co.jp',
+};
+
+let userRegion = localStorage.getItem('audible_region') || 'us';
+
+function audibleUrl(asin) {
+  return `https://${REGIONS[userRegion] || REGIONS.us}/pd/${asin}`;
+}
+
+function setRegion(code) {
+  userRegion = code;
+  localStorage.setItem('audible_region', code);
+  document.getElementById('region-select').value = code;
+  renderBody();
+}
+
 // ─── Column definitions ───────────────────────────────────────────────────────
 const COLUMNS = [
   { key:'fav',           label:'★',          always:true,  def:true,  sort:false, filter:false,   dk:null },
@@ -48,6 +71,7 @@ let ownedFilter      = ''; // '' | 'owned' | 'unowned'
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
   showTosBanner();
+  document.getElementById('region-select').value = userRegion;
   buildColSelector();
 
   try {
@@ -427,7 +451,7 @@ function buildCell(sale, col) {
     }
     case 'title': {
       const a = document.createElement('a');
-      a.href = sale.audible_url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.href = audibleUrl(sale.asin); a.target = '_blank'; a.rel = 'noopener noreferrer';
       a.textContent = sale.title || '';
       td.appendChild(a);
       if (ownedAsins.has(sale.asin)) {
@@ -779,7 +803,7 @@ function renderCards() {
   const frag = document.createDocumentFragment();
   for (const sale of filtered) {
     const card = document.createElement('a');
-    card.href      = sale.audible_url;
+    card.href      = audibleUrl(sale.asin);
     card.target    = '_blank';
     card.rel       = 'noopener noreferrer';
     card.className = 'book-card' + (ownedAsins.has(sale.asin) ? ' owned' : '');
@@ -925,6 +949,14 @@ function buildFilterSheet() {
     </label>`).join('');
 
   document.getElementById('sheet-body').innerHTML = `
+    <div class="sheet-section">
+      <div class="sheet-label">Audible region</div>
+      <select class="sheet-select" onchange="setRegion(this.value)">
+        ${Object.entries({us:'🇺🇸 US',ca:'🇨🇦 Canada',uk:'🇬🇧 UK',au:'🇦🇺 Australia',de:'🇩🇪 Germany',fr:'🇫🇷 France',jp:'🇯🇵 Japan'})
+          .map(([k,v]) => `<option value="${k}" ${userRegion===k?'selected':''}>${v}</option>`).join('')}
+      </select>
+    </div>
+
     <div class="sheet-section">
       <div class="sheet-label">Search title</div>
       <input type="search" value="${esc(searchQuery)}" placeholder="Type to search…"

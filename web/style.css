@@ -136,6 +136,17 @@ input[type="file"] { font-size:12px; }
 .pill:hover  { border-color:var(--orange); color:var(--orange); }
 .pill.active { background:var(--orange); border-color:var(--orange); color:#fff; }
 
+.region-select {
+  padding:4px 8px;
+  border:1px solid var(--border);
+  border-radius:6px;
+  font-size:13px;
+  background:var(--surface);
+  color:var(--text);
+  cursor:pointer;
+}
+.region-select:focus { outline:none; border-color:var(--orange); }
+
 .quick-search {
   padding:5px 12px;
   border:1px solid var(--border);
