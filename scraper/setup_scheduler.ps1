@@ -6,8 +6,8 @@ $trigger1 = New-ScheduledTaskTrigger -Daily -At "08:00AM"
 $trigger2 = New-ScheduledTaskTrigger -Daily -At "08:00PM"
 $settings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit (New-TimeSpan -Minutes 30) `
-    -StartWhenAvailable $true `
-    -WakeToRun $false
+    -StartWhenAvailable `
+    -DontStopIfGoingOnBatteries
 
 Register-ScheduledTask `
     -TaskName    "AudibleSalesScraper" `

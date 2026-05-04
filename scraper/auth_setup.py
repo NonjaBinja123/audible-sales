@@ -9,10 +9,11 @@ import audible
 
 load_dotenv()
 
-AUTH_FILE = pathlib.Path(__file__).parent / "auth.json"
+LOCALE    = os.environ.get("AUDIBLE_LOCALE", "us")
+AUTH_FILES = {"us": "auth.json", "ca": "auth_ca.json", "uk": "auth_uk.json"}
+AUTH_FILE  = pathlib.Path(__file__).parent / AUTH_FILES.get(LOCALE, f"auth_{LOCALE}.json")
 EMAIL     = os.environ["AUDIBLE_EMAIL"]
 PASSWORD  = os.environ["AUDIBLE_PASSWORD"]
-LOCALE    = os.environ.get("AUDIBLE_LOCALE", "us")
 
 
 def captcha_callback(captcha_url: str) -> str:

@@ -10,16 +10,31 @@ load_dotenv()
 ROOT      = pathlib.Path(__file__).parent.parent
 DATA_FILE = ROOT / "data" / "sales.json"
 CSV_FILE  = ROOT / "data" / "sales.csv"
-AUTH_FILE = pathlib.Path(__file__).parent / "auth.json"
 
 CSV_FIELDS = [
-    "type","asin","title","author","narrator","genre","tags",
+    "region","type","asin","title","author","narrator","genre","tags",
     "length_hours","rating","rating_count","price","regular_price",
     "cover_url","audible_url",
 ]
 
-OVR  = "overrideBaseCountry=true&ipRedirectOverride=true"
-BASE = "https://www.audible.com"
+# Regions to scrape. Add/remove entries here to enable/disable regions.
+# auth_file must exist (run auth_setup.py with AUDIBLE_LOCALE=<code> to create it).
+SCRAPER_DIR = pathlib.Path(__file__).parent
+
+REGION_CONFIGS = {
+    "us": {
+        "base":      "https://www.audible.com",
+        "ovr":       "overrideBaseCountry=true&ipRedirectOverride=true",
+        "auth_file": SCRAPER_DIR / "auth.json",
+    },
+    "ca": {
+        "base":      "https://www.audible.ca",
+        "ovr":       "",
+        "auth_file": SCRAPER_DIR / "auth_ca.json",
+    },
+}
+
+ENABLED_REGIONS = ["us", "ca"]
 
 
 # ---------------------------------------------------------------------------
@@ -33,8 +48,8 @@ def _make_session(cookies: dict | None = None) -> curl.Session:
     return s
 
 
-def _auth_cookies() -> dict:
-    auth = audible.Authenticator.from_file(AUTH_FILE)
+def _auth_cookies(auth_file: pathlib.Path) -> dict:
+    auth = audible.Authenticator.from_file(auth_file)
     return dict(auth.website_cookies or {})
 
 
@@ -42,7 +57,7 @@ def _auth_cookies() -> dict:
 # Parsing
 # ---------------------------------------------------------------------------
 
-def _parse_card(card, sale_type: str) -> dict | None:
+def _parse_card(card, sale_type: str, region: str = "us", base: str = "https://www.audible.com") -> dict | None:
     asin_el = card.select_one(".adbl-asin-impression[data-asin]")
     if not asin_el:
         return None
@@ -93,6 +108,7 @@ def _parse_card(card, sale_type: str) -> dict | None:
     cover_url = img.get("src") if img else None
 
     return {
+        "region":        region,
         "type":          sale_type,
         "asin":          asin,
         "title":         title,
@@ -105,11 +121,12 @@ def _parse_card(card, sale_type: str) -> dict | None:
         "price":         price,
         "regular_price": regular_price,
         "cover_url":     cover_url,
-        "audible_url":   f"{BASE}/pd/{asin}",
+        "audible_url":   f"{base}/pd/{asin}",
     }
 
 
-def _scrape_listing(session: curl.Session, start_url: str, sale_type: str) -> list[dict]:
+def _scrape_listing(session: curl.Session, start_url: str, sale_type: str,
+                    region: str = "us", base: str = "https://www.audible.com") -> list[dict]:
     """Scrape a paginated product listing page, return all items."""
     items: list[dict] = []
     seen:  set[str]   = set()
@@ -126,7 +143,7 @@ def _scrape_listing(session: curl.Session, start_url: str, sale_type: str) -> li
         cards = soup.select(".productListItem")
         new   = 0
         for card in cards:
-            item = _parse_card(card, sale_type)
+            item = _parse_card(card, sale_type, region, base)
             if item and item["asin"] not in seen:
                 items.append(item)
                 seen.add(item["asin"])
@@ -166,13 +183,12 @@ def _find_daily_deal_asin(soup) -> str | None:
     return m.group(1) if m else None
 
 
-def _fetch_daily_deal(asin: str) -> dict | None:
+def _fetch_daily_deal(asin: str, base: str = "https://www.audible.com", region: str = "us") -> dict | None:
     """Fetch daily deal item: price from product page, metadata from API."""
-    # Price from product page (reflects live sale price)
     session = _make_session()
     price = regular_price = None
     try:
-        r    = session.get(f"{BASE}/pd/{asin}?{OVR}", timeout=20)
+        r    = session.get(f"{base}/pd/{asin}", timeout=20)
         soup = BeautifulSoup(r.text, "html.parser")
         sale_el = soup.select_one(".buybox-sale-price")
         if sale_el:
@@ -199,6 +215,7 @@ def _fetch_daily_deal(asin: str) -> dict | None:
         runtime  = p.get("runtime_length_min") or 0
         overall  = (p.get("rating") or {}).get("overall_distribution") or {}
         return {
+            "region":        region,
             "type":          "daily",
             "asin":          asin,
             "title":         p.get("title"),
@@ -212,7 +229,7 @@ def _fetch_daily_deal(asin: str) -> dict | None:
             "price":         price,
             "regular_price": regular_price,
             "cover_url":     (p.get("product_images") or {}).get("500"),
-            "audible_url":   f"{BASE}/pd/{asin}",
+            "audible_url":   f"{base}/pd/{asin}",
         }
     except Exception as e:
         print(f"  Daily deal API error: {e}", file=sys.stderr)
@@ -223,26 +240,27 @@ def _fetch_daily_deal(asin: str) -> dict | None:
 # Monthly deals (public — no auth needed)
 # ---------------------------------------------------------------------------
 
-def scrape_monthly() -> list[dict]:
+def scrape_monthly(base: str, ovr: str, region: str) -> list[dict]:
     session = _make_session()
-    url     = f"{BASE}/ep/audiobook-deals?{OVR}"
+    sep = "?" if "?" not in base else "&"
+    url = f"{base}/ep/audiobook-deals?{ovr}" if ovr else f"{base}/ep/audiobook-deals"
     print(f"  Starting at {url}")
 
     # Identify daily deal ASIN from page 0 before full scrape
     try:
-        r0          = session.get(url, timeout=20)
-        soup0       = BeautifulSoup(r0.text, "html.parser")
-        daily_asin  = _find_daily_deal_asin(soup0)
+        r0         = session.get(url, timeout=20)
+        soup0      = BeautifulSoup(r0.text, "html.parser")
+        daily_asin = _find_daily_deal_asin(soup0)
         if daily_asin:
             print(f"  Daily deal ASIN: {daily_asin}")
     except Exception:
         daily_asin = None
 
-    items = _scrape_listing(session, url, "monthly")
+    items = _scrape_listing(session, url, "monthly", region, base)
 
     if daily_asin:
         print(f"  Fetching daily deal data...")
-        daily_item = _fetch_daily_deal(daily_asin)
+        daily_item = _fetch_daily_deal(daily_asin, base, region)
         if daily_item:
             items.append(daily_item)
 
@@ -266,17 +284,14 @@ def _slug_to_type(slug: str) -> str:
     return re.sub(r'[^a-z0-9]', '', slug)[:20] or 'promo'
 
 
-def _discover_promo_paths(session: curl.Session) -> dict[str, str]:
+def _discover_promo_paths(session: curl.Session, base: str, ovr: str) -> dict[str, str]:
     """
     Scrape Audible's home + deals pages to find active /special-promo/ URLs.
     Returns {promo_path: sale_type}, e.g. {'/special-promo/2for1': '2for1'}.
     """
     found: dict[str, str] = {}
-    check = [
-        f"{BASE}/?{OVR}",
-        f"{BASE}/ep/audiobook-deals?{OVR}",
-        f"{BASE}/ep/deals-and-sales?{OVR}",
-    ]
+    def url(path): return f"{base}{path}?{ovr}" if ovr else f"{base}{path}"
+    check = [url("/"), url("/ep/audiobook-deals"), url("/ep/deals-and-sales")]
     for url in check:
         try:
             r = session.get(url, timeout=20)
@@ -290,9 +305,10 @@ def _discover_promo_paths(session: curl.Session) -> dict[str, str]:
     return found
 
 
-def _scrape_promo_path(session: curl.Session, path: str, sale_type: str) -> list[dict]:
+def _scrape_promo_path(session: curl.Session, path: str, sale_type: str,
+                       base: str, ovr: str, region: str) -> list[dict]:
     """Scrape a single special promo, handling category-node pages if present."""
-    promo_url = f"{BASE}{path}?{OVR}"
+    promo_url = f"{base}{path}?{ovr}" if ovr else f"{base}{path}"
     r = session.get(promo_url, timeout=20)
     if r.status_code != 200:
         print(f"  {path} returned {r.status_code} — may require auth or be inactive",
@@ -308,15 +324,14 @@ def _scrape_promo_path(session: curl.Session, path: str, sale_type: str) -> list
 
     if nodes:
         for node in nodes:
-            node_url = f"{BASE}{path}/cat?node={node}&{OVR}"
+            node_url = f"{base}{path}/cat?node={node}&{ovr}" if ovr else f"{base}{path}/cat?node={node}"
             print(f"    Node {node}:")
-            for item in _scrape_listing(session, node_url, sale_type):
+            for item in _scrape_listing(session, node_url, sale_type, region, base):
                 if item["asin"] not in seen:
                     items.append(item)
                     seen.add(item["asin"])
     else:
-        # Flat promo page — scrape directly
-        for item in _scrape_listing(session, promo_url, sale_type):
+        for item in _scrape_listing(session, promo_url, sale_type, region, base):
             if item["asin"] not in seen:
                 items.append(item)
                 seen.add(item["asin"])
@@ -324,13 +339,13 @@ def _scrape_promo_path(session: curl.Session, path: str, sale_type: str) -> list
     return items
 
 
-def scrape_promos() -> list[dict]:
+def scrape_promos(base: str, ovr: str, auth_file: pathlib.Path, region: str) -> list[dict]:
     """Discover and scrape all currently active special promotional sales."""
-    cookies = _auth_cookies()
+    cookies = _auth_cookies(auth_file)
     session = _make_session(cookies)
 
     print("  Discovering active promotions...")
-    promo_paths = _discover_promo_paths(session)
+    promo_paths = _discover_promo_paths(session, base, ovr)
 
     if not promo_paths:
         print("  No special promotions found on hub pages.")
@@ -341,7 +356,7 @@ def scrape_promos() -> list[dict]:
 
     for path, sale_type in promo_paths.items():
         print(f"  Promo: {path}  →  type={sale_type!r}")
-        for item in _scrape_promo_path(session, path, sale_type):
+        for item in _scrape_promo_path(session, path, sale_type, base, ovr, region):
             if item["asin"] not in seen:
                 all_items.append(item)
                 seen.add(item["asin"])
@@ -414,10 +429,12 @@ def load_existing() -> dict:
 
 
 def merge(existing: list[dict], fresh: list[dict]) -> list[dict]:
-    by_asin = {s["asin"]: s for s in existing}
+    # Key by (asin, region) so the same book in different stores coexists
+    by_key = {(s["asin"], s.get("region", "us")): s for s in existing}
     for item in fresh:
-        by_asin[item["asin"]] = item
-    return list(by_asin.values())
+        key = (item["asin"], item.get("region", "us"))
+        by_key[key] = item
+    return list(by_key.values())
 
 
 def save(sales: list[dict]) -> None:
@@ -461,23 +478,34 @@ def git_push() -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    print("=== Monthly deals ===")
-    monthly = scrape_monthly()
-    print(f"Monthly total: {len(monthly)}")
+    all_monthly: list[dict] = []
+    all_promos:  list[dict] = []
 
-    print("\n=== Special promotions (auto-discovered) ===")
-    promos = scrape_promos()
-    print(f"Promos total: {len(promos)}")
+    for region_code in ENABLED_REGIONS:
+        cfg = REGION_CONFIGS[region_code]
+        base, ovr, auth_file = cfg["base"], cfg["ovr"], cfg["auth_file"]
 
-    fresh = monthly + promos
+        print(f"\n=== [{region_code.upper()}] Monthly deals ===")
+        monthly = scrape_monthly(base, ovr, region_code)
+        print(f"  Total: {len(monthly)}")
+        all_monthly.extend(monthly)
+
+        print(f"\n=== [{region_code.upper()}] Special promotions ===")
+        if auth_file.exists():
+            promos = scrape_promos(base, ovr, auth_file, region_code)
+            print(f"  Total: {len(promos)}")
+            all_promos.extend(promos)
+        else:
+            print(f"  No auth file ({auth_file.name}) — skipping promos for {region_code}")
+
+    fresh = all_monthly + all_promos
     if not fresh:
         print("Nothing scraped.")
         return
 
     existing = load_existing()
-    # Monthly first, then promos — promos overwrite monthly if same ASIN
-    merged   = merge(existing["sales"], monthly)
-    merged   = merge(merged, promos)
+    merged   = merge(existing["sales"], all_monthly)
+    merged   = merge(merged, all_promos)
 
     print("\n=== Enriching tags ===")
     merged = enrich_tags(merged)

@@ -3,6 +3,7 @@ scraper/.venv/
 scraper/__pycache__/
 scraper/*.pyc
 scraper/auth.json
+scraper/auth_*.json
 scraper/web_session.json
 *.egg-info/
 .venv/

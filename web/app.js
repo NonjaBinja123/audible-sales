@@ -31,6 +31,7 @@ const COLUMNS = [
   { key:'fav',           label:'★',          always:true,  def:true,  sort:false, filter:false,   dk:null },
   { key:'cover',         label:'Cover',       always:false, def:true,  sort:false, filter:false,   dk:null },
   { key:'title',         label:'Title',       always:true,  def:true,  sort:true,  filter:'text',  dk:'title' },
+  { key:'region',        label:'Region',      always:false, def:true,  sort:true,  filter:'list',  dk:'region' },
   { key:'type',          label:'Type',        always:false, def:true,  sort:true,  filter:'list',  dk:'type' },
   { key:'author',        label:'Author',      always:false, def:true,  sort:true,  filter:'list',  dk:'author' },
   { key:'narrator',      label:'Narrator',    always:false, def:false, sort:true,  filter:'list',  dk:'narrator' },
@@ -449,9 +450,16 @@ function buildCell(sale, col) {
       }
       break;
     }
+    case 'region': {
+      const REGION_FLAGS = { us:'🇺🇸', ca:'🇨🇦', uk:'🇬🇧', au:'🇦🇺', de:'🇩🇪', fr:'🇫🇷', jp:'🇯🇵' };
+      td.textContent = (REGION_FLAGS[sale.region] || '') + ' ' + (sale.region || '').toUpperCase();
+      break;
+    }
     case 'title': {
       const a = document.createElement('a');
-      a.href = audibleUrl(sale.asin); a.target = '_blank'; a.rel = 'noopener noreferrer';
+      // Use item's native URL (already has the right regional domain)
+      a.href = sale.audible_url || audibleUrl(sale.asin);
+      a.target = '_blank'; a.rel = 'noopener noreferrer';
       a.textContent = sale.title || '';
       td.appendChild(a);
       if (ownedAsins.has(sale.asin)) {
@@ -803,7 +811,7 @@ function renderCards() {
   const frag = document.createDocumentFragment();
   for (const sale of filtered) {
     const card = document.createElement('a');
-    card.href      = audibleUrl(sale.asin);
+    card.href      = sale.audible_url || audibleUrl(sale.asin);
     card.target    = '_blank';
     card.rel       = 'noopener noreferrer';
     card.className = 'book-card' + (ownedAsins.has(sale.asin) ? ' owned' : '');
