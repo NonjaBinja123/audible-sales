@@ -67,6 +67,7 @@ async function init() {
     restoreLibation();
     renderHeader();
     applyFilters();
+    setTimeout(updateStickyOffsets, 0);
   } catch(e) {
     document.getElementById('sales-tbody').innerHTML =
       `<tr><td colspan="20" class="empty-msg">Failed to load data: ${e.message}</td></tr>`;
@@ -248,9 +249,14 @@ function toggleSort(dk) {
   applySort();
 }
 
+function sortNorm(v) {
+  // Strip leading non-alphanumeric characters so !,#,etc. don't sort before A-Z
+  return typeof v === 'string' ? v.replace(/^[^a-zA-Z0-9]+/, '') : v;
+}
+
 function applySort() {
   filtered.sort((a, b) => {
-    let va = a[sortKey], vb = b[sortKey];
+    let va = sortNorm(a[sortKey]), vb = sortNorm(b[sortKey]);
     if (va == null && vb == null) return 0;
     if (va == null) return  sortAsc ?  1 : -1;
     if (vb == null) return  sortAsc ? -1 :  1;
@@ -596,5 +602,15 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ─── Sticky offsets ───────────────────────────────────────────────────────────
+function updateStickyOffsets() {
+  const controlsH    = document.getElementById('controls').offsetHeight;
+  const quickH       = document.getElementById('quick-filters').offsetHeight;
+  document.getElementById('quick-filters').style.top = controlsH + 'px';
+  const theadRow = document.querySelector('#sales-table thead tr');
+  if (theadRow) theadRow.style.top = (controlsH + quickH) + 'px';
+}
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 init();
+window.addEventListener('resize', updateStickyOffsets);

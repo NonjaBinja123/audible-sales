@@ -113,7 +113,7 @@ input[type="file"] { font-size:12px; }
   gap:6px;
   flex-wrap:wrap;
   position:sticky;
-  top:49px;
+  top:0;
   z-index:90;
 }
 
@@ -160,7 +160,7 @@ thead tr {
   background:var(--surface);
   border-bottom:2px solid var(--border);
   position:sticky;
-  top:89px;
+  top:0;
   z-index:50;
 }
 
