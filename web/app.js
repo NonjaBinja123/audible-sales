@@ -364,9 +364,11 @@ function _updateIndeterminate(treeEl) {
 
 function clearCatFilter() {
   excludedCategories.clear();
-  document.querySelectorAll('.cat-tree input[type=checkbox]').forEach(i => {
-    i.checked = true; i.indeterminate = false;
-  });
+  // Rebuild panels so checkboxes reflect cleared state
+  const desk = document.getElementById('cats-selector');
+  if (desk && !desk.hidden) buildCategoryPanel(desk);
+  const mob = document.getElementById('sheet-cat-tree');
+  if (mob) buildCategoryPanel(mob);
   document.getElementById('cats-btn')?.classList.remove('active');
   renderHeader(); applyFilters();
 }
@@ -1203,9 +1205,11 @@ function buildFilterSheet() {
       <div class="libation-status" style="margin-top:4px">${document.getElementById('libation-status').textContent}</div>
     </div>
   `;
-  // Populate category tree inside sheet
-  const catContainer = document.getElementById('sheet-cat-tree');
-  if (catContainer) buildCategoryPanel(catContainer);
+  // Populate category tree inside sheet (requestAnimationFrame ensures DOM is ready)
+  requestAnimationFrame(() => {
+    const catContainer = document.getElementById('sheet-cat-tree');
+    if (catContainer) buildCategoryPanel(catContainer);
+  });
 }
 
 function setMobileRange(dk, bound, val) {
