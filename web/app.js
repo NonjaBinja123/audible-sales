@@ -53,7 +53,9 @@ let quickType        = '';
 let activeGenres     = new Set();
 let searchQuery        = '';
 let ownedFilter        = ''; // '' | 'owned' | 'unowned'
-let excludedCategories = new Set(); // category names unchecked in tree (default = all checked)
+let excludedCategories = new Set();
+let authorFilter       = '';
+let narratorFilter     = '';
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
@@ -237,6 +239,7 @@ function clearGenreFilter() {
 
 function clearAllFilters() {
   quickType = ''; searchQuery = ''; ownedFilter = '';
+  authorFilter = ''; narratorFilter = '';
   activeGenres.clear(); excludedCategories.clear(); colFilters = {};
   document.getElementById('title-search').value = '';
   document.getElementById('favs-only').checked = false;
@@ -252,7 +255,7 @@ function clearAllFilters() {
 }
 
 function _updateClearBtn() {
-  const active = quickType || searchQuery || ownedFilter ||
+  const active = quickType || searchQuery || ownedFilter || authorFilter || narratorFilter ||
     activeGenres.size > 0 || excludedCategories.size > 0 || Object.keys(colFilters).length > 0;
   document.getElementById('clear-filters-btn').hidden = !active;
 }
@@ -431,7 +434,9 @@ function applyFilters() {
     if (ownedFilter === 'unowned' &&  ownedAsins.has(s.asin)) return false;
 
     // Title search
-    if (searchQuery && !(s.title || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery  && !(s.title    || '').toLowerCase().includes(searchQuery.toLowerCase()))   return false;
+    if (authorFilter && !(s.author   || '').toLowerCase().includes(authorFilter.toLowerCase()))   return false;
+    if (narratorFilter && !(s.narrator || '').toLowerCase().includes(narratorFilter.toLowerCase())) return false;
 
     // Column filters
     for (const [dk, f] of Object.entries(colFilters)) {
@@ -1101,6 +1106,20 @@ function buildFilterSheet() {
       <div class="sheet-pills">${typePills}</div>
     </div>
 
+    <div class="sheet-section">
+      <div class="sheet-label">Author</div>
+      <input type="search" class="sheet-text-filter" placeholder="Filter by author…"
+             value="${esc(authorFilter)}"
+             oninput="authorFilter=this.value; applyFilters()">
+    </div>
+
+    <div class="sheet-section">
+      <div class="sheet-label">Narrator</div>
+      <input type="search" class="sheet-text-filter" placeholder="Filter by narrator…"
+             value="${esc(narratorFilter)}"
+             oninput="narratorFilter=this.value; applyFilters()">
+    </div>
+
     ${genres.length ? `
     <div class="sheet-section">
       <div class="sheet-label">Genre</div>
@@ -1121,6 +1140,42 @@ function buildFilterSheet() {
              oninput="document.getElementById('sheet-rating-val').textContent=this.value;
                       colFilters['rating']={type:'range',min:+this.value||null,max:null};
                       applyFilters()">
+    </div>
+
+    <div class="sheet-section">
+      <div class="sheet-label">Min # Ratings</div>
+      <input type="number" class="sheet-text-filter" step="100" placeholder="e.g. 500"
+             value="${colFilters['rating_count']?.min ?? ''}"
+             oninput="setMobileRange('rating_count','min',this.value)">
+    </div>
+
+    <div class="sheet-section">
+      <div class="sheet-label">Length (hours)</div>
+      <div class="sheet-range-row">
+        <label>Min<input type="number" step="0.5" placeholder="0"
+               value="${colFilters['length_hours']?.min ?? ''}"
+               oninput="setMobileRange('length_hours','min',this.value)"></label>
+        <label>Max<input type="number" step="0.5" placeholder="any"
+               value="${colFilters['length_hours']?.max ?? ''}"
+               oninput="setMobileRange('length_hours','max',this.value)"></label>
+      </div>
+    </div>
+
+    <div class="sheet-section">
+      <div class="sheet-label">Sale Price</div>
+      <label class="sheet-check" style="margin-bottom:8px">
+        <input type="checkbox" ${(colFilters['price']?.includeCredit ?? true) ? 'checked' : ''}
+               onchange="fpPriceCredit(this.checked)">
+        Include 1-credit (2-for-1)
+      </label>
+      <div class="sheet-range-row">
+        <label>Min<input type="number" step="0.01" placeholder="0"
+               value="${colFilters['price']?.min ?? ''}"
+               oninput="if(!colFilters['price'])colFilters['price']={type:'price',includeCredit:true};colFilters['price'].min=this.value?+this.value:null;applyFilters()"></label>
+        <label>Max<input type="number" step="0.01" placeholder="any"
+               value="${colFilters['price']?.max ?? ''}"
+               oninput="if(!colFilters['price'])colFilters['price']={type:'price',includeCredit:true};colFilters['price'].max=this.value?+this.value:null;applyFilters()"></label>
+      </div>
     </div>
 
     <label class="sheet-check">
@@ -1151,6 +1206,12 @@ function buildFilterSheet() {
   // Populate category tree inside sheet
   const catContainer = document.getElementById('sheet-cat-tree');
   if (catContainer) buildCategoryPanel(catContainer);
+}
+
+function setMobileRange(dk, bound, val) {
+  if (!colFilters[dk]) colFilters[dk] = { type: 'range', min: null, max: null };
+  colFilters[dk][bound] = val !== '' ? +val : null;
+  applyFilters();
 }
 
 function setMobileSort(key) {
