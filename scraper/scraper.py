@@ -370,21 +370,88 @@ def scrape_promos(base: str, ovr: str, auth_file: pathlib.Path, region: str) -> 
 # Tag enrichment via Audible API
 # ---------------------------------------------------------------------------
 
-def _extract_tags(product: dict) -> str:
+def _extract_tags(product: dict) -> tuple[str, str | None]:
+    """Returns (tags_string, top_level_genre)."""
     tags = []
+    genre = None
     for ladder in (product.get("category_ladders") or []):
         for rung in (ladder.get("ladder") or []):
             name = rung.get("name", "").strip()
             if name and name not in tags:
+                if genre is None:
+                    genre = name          # first rung of first ladder = top-level genre
                 tags.append(name)
     for kw in (product.get("thesaurus_subject_keywords") or []):
         kw = kw.strip()
-        if kw and kw not in tags:
-            tags.append(kw)
-    return "; ".join(tags)
+        if not kw:
+            continue
+        readable = _GENRE_MAP.get(kw.lower(), kw)
+        if readable not in tags:
+            if genre is None:
+                genre = readable
+            tags.append(readable)
+    return "; ".join(tags), genre
+
+
+_GENRE_MAP = {
+    'literature-and-fiction':      'Literature & Fiction',
+    'mystery-thriller-suspense':   'Mystery, Thriller & Suspense',
+    'science-fiction-fantasy':     'Science Fiction & Fantasy',
+    'romance':                     'Romance',
+    'biographies-memoirs':         'Biographies & Memoirs',
+    'business-careers':            'Business & Careers',
+    'self-development':            'Self Development',
+    'history':                     'History',
+    'health-wellness':             'Health & Wellness',
+    'true-crime':                  'True Crime',
+    'politics-social-sciences':    'Politics & Social Sciences',
+    'religion-spirituality':       'Religion & Spirituality',
+    'children':                    "Children's",
+    'teen-young-adult':            'Teen & Young Adult',
+    'science-technology':          'Science & Technology',
+    'arts-entertainment':          'Arts & Entertainment',
+    'comedy-humor':                'Comedy & Humor',
+    'education-learning':          'Education & Learning',
+    'money-finance':               'Money & Finance',
+    'sports-outdoors':             'Sports & Outdoors',
+    'travel-tourism':              'Travel & Tourism',
+    'home-garden':                 'Home & Garden',
+    'erotica':                     'Erotica',
+    'lgbtq':                       'LGBTQ+',
+}
+
+def _slug_to_genre(slug: str) -> str:
+    """Convert a slug like 'literature-and-fiction' to a readable genre."""
+    return _GENRE_MAP.get(slug.lower()) or slug.replace('-', ' ').title()
+
+def _genre_from_tags(tags_str: str) -> str | None:
+    """Derive genre from existing tags string — picks first recognisable tag."""
+    if not tags_str:
+        return None
+    for tag in tags_str.split(";"):
+        tag = tag.strip()
+        if not tag:
+            continue
+        if tag.lower() in _GENRE_MAP:
+            return _GENRE_MAP[tag.lower()]
+        if ' ' in tag or (tag and tag[0].isupper()):
+            return tag
+        if '-' in tag:
+            return _slug_to_genre(tag)
+    return None
 
 
 def enrich_tags(sales: list[dict]) -> list[dict]:
+    # Backfill genre for already-enriched items (no API calls needed)
+    backfilled = 0
+    for s in sales:
+        if s.get("tags") is not None and not s.get("genre"):
+            s["genre"] = _genre_from_tags(s["tags"])
+            if s["genre"]:
+                backfilled += 1
+    if backfilled:
+        print(f"  Backfilled genre for {backfilled} existing items from tags.")
+
     needs = [s for s in sales if s.get("tags") is None]
     if not needs:
         print("  Tags already up to date.")
@@ -406,7 +473,9 @@ def enrich_tags(sales: list[dict]) -> list[dict]:
                     response_groups="product_attrs,product_desc",
                 )
                 product = resp.get("product", resp)
-                by_asin[asin]["tags"] = _extract_tags(product)
+                tags, genre = _extract_tags(product)
+                by_asin[asin]["tags"]  = tags
+                by_asin[asin]["genre"] = genre
             except Exception as e:
                 by_asin[asin]["tags"] = ""
                 print(f"  Warning: could not enrich {asin}: {e}", file=sys.stderr)
