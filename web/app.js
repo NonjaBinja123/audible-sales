@@ -15,8 +15,11 @@ const REGIONS = {
 
 let userRegion = localStorage.getItem('audible_region') || 'us';
 
-function audibleUrl(asin) {
-  return `https://${REGIONS[userRegion] || REGIONS.us}/pd/${asin}`;
+function audibleUrl(asin, itemRegion) {
+  // If item has a native region, use its correct store domain
+  // Otherwise use the user's preferred region
+  const region = itemRegion || userRegion;
+  return `https://${REGIONS[region] || REGIONS.us}/pd/${asin}`;
 }
 
 function setRegion(code) {
@@ -458,7 +461,7 @@ function buildCell(sale, col) {
     case 'title': {
       const a = document.createElement('a');
       // Use item's native URL (already has the right regional domain)
-      a.href = sale.audible_url || audibleUrl(sale.asin);
+      a.href = audibleUrl(sale.asin, sale.region);
       a.target = '_blank'; a.rel = 'noopener noreferrer';
       a.textContent = sale.title || '';
       td.appendChild(a);
@@ -811,7 +814,7 @@ function renderCards() {
   const frag = document.createDocumentFragment();
   for (const sale of filtered) {
     const card = document.createElement('a');
-    card.href      = sale.audible_url || audibleUrl(sale.asin);
+    card.href      = audibleUrl(sale.asin, sale.region);
     card.target    = '_blank';
     card.rel       = 'noopener noreferrer';
     card.className = 'book-card' + (ownedAsins.has(sale.asin) ? ' owned' : '');
