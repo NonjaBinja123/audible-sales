@@ -26,6 +26,7 @@
     <h1>Audible Sales</h1>
     <span id="last-updated"></span>
     <button id="theme-toggle" onclick="cycleTheme()"></button>
+    <button id="help-btn" onclick="openHelp()">?</button>
   </header>
 
   <div id="sticky-wrap">
@@ -91,6 +92,7 @@
       <button id="filter-sheet-btn" onclick="openFilterSheet()">⚙ Filters</button>
       <span id="mobile-count"></span>
       <button id="theme-toggle-mob" onclick="cycleTheme()" style="padding:4px 10px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:4px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;"></button>
+      <button onclick="openHelp()" style="padding:4px 10px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:4px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;">?</button>
     </div>
   </div>
 
@@ -107,6 +109,35 @@
     <div id="sheet-body"></div>
     <div id="sheet-footer">
       <button id="sheet-apply" onclick="closeFilterSheet()">Done</button>
+    </div>
+  </div>
+
+  <!-- Help modal -->
+  <div id="help-overlay" hidden></div>
+  <div id="help-modal" hidden>
+    <div id="help-content">
+      <h2>How to use Audible Sales</h2>
+
+      <h3>Sale types</h3>
+      <p><strong>2-for-1</strong> — Use one Audible credit, get two books. Price shown as "1 credit".</p>
+      <p><strong>Monthly deals</strong> — Rotating selection at discounted cash prices, no credit needed.</p>
+      <p><strong>Daily deal</strong> — One featured book per day at a steep discount.</p>
+      <p><strong>Cash sale</strong> — Limited-time cash price reductions on specific titles.</p>
+
+      <h3>Ratings</h3>
+      <p><strong>Rating</strong> — Raw average from Audible reviews.</p>
+      <p><strong>Bayesian</strong> — Adjusted rating pulled toward the global average (~4.2) when a book has few reviews. Stops a book with one 5-star review from topping the list.</p>
+      <p><strong>Weighted</strong> — Rating × log₁₀(reviews + 1). Rewards books that are both highly rated and widely reviewed.</p>
+
+      <h3>Filters</h3>
+      <p><strong>Genre &amp; Categories</strong> — All checked = show all. Uncheck items to hide them. Use <em>Uncheck all</em> then check specific ones to show only those.</p>
+      <p><strong>Column filters (▾)</strong> — Each column header has a filter dropdown for ranges, lists, or text search.</p>
+      <p><strong>Favourites</strong> — Star any book to save it. Use <em>Favourites only</em> to filter to your starred list.</p>
+      <p><strong>Libation</strong> — Load a CSV export from the Libation app to mark books you already own. The file is read locally — nothing is uploaded.</p>
+      <p><strong>Region</strong> — Switch between US and Canada Audible stores.</p>
+
+      <h3>Theme toggle</h3>
+      <p>Cycles through <strong>Auto</strong> (follows your OS setting) → <strong>Dark</strong> → <strong>Light</strong> → Auto. Preference is saved across sessions.</p>
     </div>
   </div>
 

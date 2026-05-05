@@ -57,6 +57,22 @@ let excludedGenres     = new Set(); // genres unchecked (default all checked = n
 let authorFilter       = '';
 let narratorFilter     = '';
 
+// ─── Help modal ───────────────────────────────────────────────────────────────
+function openHelp() {
+  document.getElementById('help-overlay').hidden = false;
+  document.getElementById('help-modal').hidden   = false;
+  const close = () => {
+    document.getElementById('help-overlay').hidden = true;
+    document.getElementById('help-modal').hidden   = true;
+    document.removeEventListener('keydown',  close);
+    document.getElementById('help-overlay').removeEventListener('click', close);
+    document.getElementById('help-modal').removeEventListener('click', close);
+  };
+  document.getElementById('help-overlay').addEventListener('click', close);
+  document.getElementById('help-modal').addEventListener('click', close);
+  setTimeout(() => document.addEventListener('keydown', close), 0);
+}
+
 // ─── Theme ────────────────────────────────────────────────────────────────────
 (function initTheme() {
   const stored = localStorage.getItem('audible_theme');

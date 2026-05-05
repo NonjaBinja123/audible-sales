@@ -651,6 +651,68 @@ html.dark .sheet-text-filter,
 html.dark .sheet-range-row input,
 html.dark .sheet-select { background:var(--bg); color:var(--text); }
 
+/* Help button */
+#help-btn {
+  margin-left:6px;
+  width:26px; height:26px;
+  border-radius:50%;
+  border:1px solid rgba(255,255,255,.4);
+  background:rgba(255,255,255,.15);
+  color:#fff;
+  font-size:13px;
+  font-weight:700;
+  cursor:pointer;
+  line-height:1;
+  flex-shrink:0;
+}
+#help-btn:hover { background:rgba(255,255,255,.3); }
+
+/* Help modal */
+#help-overlay {
+  position:fixed; inset:0;
+  background:rgba(0,0,0,.55);
+  z-index:1000;
+}
+#help-overlay:not([hidden]) { display:block; }
+
+#help-modal {
+  position:fixed;
+  top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  z-index:1001;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:12px;
+  box-shadow:0 12px 48px rgba(0,0,0,.3);
+  width:min(560px, 92vw);
+  max-height:80vh;
+  overflow-y:auto;
+}
+#help-modal:not([hidden]) { display:block; }
+
+#help-content {
+  padding:28px 28px 24px;
+}
+#help-content h2 {
+  font-size:18px; font-weight:700;
+  margin-bottom:18px;
+  color:var(--text);
+}
+#help-content h3 {
+  font-size:12px; font-weight:700;
+  text-transform:uppercase; letter-spacing:.06em;
+  color:var(--orange);
+  margin:18px 0 8px;
+}
+#help-content h3:first-of-type { margin-top:0; }
+#help-content p {
+  font-size:13px; line-height:1.6;
+  color:var(--text);
+  margin-bottom:6px;
+}
+#help-content strong { font-weight:700; }
+#help-content em { font-style:italic; color:var(--muted); }
+
 /* Theme toggle button */
 #theme-toggle {
   margin-left:auto;
