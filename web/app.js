@@ -3,30 +3,13 @@
 const DATA_URL   = '../data/sales.json';
 const BAYESIAN_M = 100;
 
-const REGIONS = {
-  us: 'www.audible.com',
-  ca: 'www.audible.ca',
-  uk: 'www.audible.co.uk',
-  au: 'www.audible.com.au',
-  de: 'www.audible.de',
-  fr: 'www.audible.fr',
-  jp: 'www.audible.co.jp',
-};
-
-let userRegion = localStorage.getItem('audible_region') || 'us';
-
-function audibleUrl(asin, itemRegion) {
-  // If item has a native region, use its correct store domain
-  // Otherwise use the user's preferred region
-  const region = itemRegion || userRegion;
-  return `https://${REGIONS[region] || REGIONS.us}/pd/${asin}`;
-}
+let regionFilter = localStorage.getItem('audible_region') || 'us';
 
 function setRegion(code) {
-  userRegion = code;
+  regionFilter = code;
   localStorage.setItem('audible_region', code);
   document.getElementById('region-select').value = code;
-  renderBody();
+  applyFilters();
 }
 
 // ─── Column definitions ───────────────────────────────────────────────────────
@@ -75,7 +58,7 @@ let ownedFilter      = ''; // '' | 'owned' | 'unowned'
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
   showTosBanner();
-  document.getElementById('region-select').value = userRegion;
+  document.getElementById('region-select').value = regionFilter;
   buildColSelector();
 
   try {
@@ -305,6 +288,9 @@ function applyFilters() {
       if (![...selectedTags].some(t => itemTags.has(t))) return false;
     }
 
+    // Region filter (treat null/missing region as 'us')
+    if (regionFilter && (s.region || 'us') !== regionFilter) return false;
+
     // Owned filter
     if (ownedFilter === 'owned'   && !ownedAsins.has(s.asin)) return false;
     if (ownedFilter === 'unowned' &&  ownedAsins.has(s.asin)) return false;
@@ -461,7 +447,7 @@ function buildCell(sale, col) {
     case 'title': {
       const a = document.createElement('a');
       // Use item's native URL (already has the right regional domain)
-      a.href = audibleUrl(sale.asin, sale.region);
+      a.href = sale.audible_url;
       a.target = '_blank'; a.rel = 'noopener noreferrer';
       a.textContent = sale.title || '';
       td.appendChild(a);
@@ -814,7 +800,7 @@ function renderCards() {
   const frag = document.createDocumentFragment();
   for (const sale of filtered) {
     const card = document.createElement('a');
-    card.href      = audibleUrl(sale.asin, sale.region);
+    card.href      = sale.audible_url;
     card.target    = '_blank';
     card.rel       = 'noopener noreferrer';
     card.className = 'book-card' + (ownedAsins.has(sale.asin) ? ' owned' : '');
@@ -964,7 +950,7 @@ function buildFilterSheet() {
       <div class="sheet-label">Audible region</div>
       <select class="sheet-select" onchange="setRegion(this.value)">
         ${Object.entries({us:'🇺🇸 US',ca:'🇨🇦 Canada',uk:'🇬🇧 UK',au:'🇦🇺 Australia',de:'🇩🇪 Germany',fr:'🇫🇷 France',jp:'🇯🇵 Japan'})
-          .map(([k,v]) => `<option value="${k}" ${userRegion===k?'selected':''}>${v}</option>`).join('')}
+          .map(([k,v]) => `<option value="${k}" ${regionFilter===k?'selected':''}>${v}</option>`).join('')}
       </select>
     </div>
 
