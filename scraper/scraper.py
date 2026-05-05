@@ -203,7 +203,7 @@ def _fetch_daily_deal(asin: str, base: str = "https://www.audible.com", region: 
 
     # Metadata from API
     try:
-        auth = audible.Authenticator.from_file(AUTH_FILE)
+        auth = audible.Authenticator.from_file(SCRAPER_DIR / "auth.json")
         with audible.Client(auth=auth) as client:
             resp = client.get(
                 f"1.0/catalog/products/{asin}",
