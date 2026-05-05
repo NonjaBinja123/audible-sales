@@ -949,7 +949,7 @@ function buildFilterSheet() {
     <div class="sheet-section">
       <div class="sheet-label">Audible region</div>
       <select class="sheet-select" onchange="setRegion(this.value)">
-        ${Object.entries({us:'🇺🇸 US',ca:'🇨🇦 Canada',uk:'🇬🇧 UK',au:'🇦🇺 Australia',de:'🇩🇪 Germany',fr:'🇫🇷 France',jp:'🇯🇵 Japan'})
+        ${Object.entries({us:'🇺🇸 US',ca:'🇨🇦 Canada'})
           .map(([k,v]) => `<option value="${k}" ${regionFilter===k?'selected':''}>${v}</option>`).join('')}
       </select>
     </div>
