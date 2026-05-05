@@ -1050,7 +1050,8 @@ function resetFilters() {
 }
 
 function buildFilterSheet() {
-  const types = [...new Set(allSales.map(s => s.type).filter(Boolean))].sort();
+  const types  = [...new Set(allSales.map(s => s.type).filter(Boolean))].sort();
+  const genres = [...new Set(allSales.map(s => s.genre).filter(Boolean))].sort();
   const ratingFilter = colFilters['rating'] || {};
   const favsOnly     = document.getElementById('favs-only').checked;
 
@@ -1100,6 +1101,19 @@ function buildFilterSheet() {
       <div class="sheet-pills">${typePills}</div>
     </div>
 
+    ${genres.length ? `
+    <div class="sheet-section">
+      <div class="sheet-label">Genre</div>
+      <div class="sheet-tag-list">
+        ${genres.map(g => `
+          <label class="sheet-check">
+            <input type="checkbox" value="${esc(g)}" ${activeGenres.has(g)?'checked':''}
+                   onchange="toggleGenrePill('${esc(g)}',this.checked)">
+            ${esc(g)}
+          </label>`).join('')}
+      </div>
+    </div>` : ''}
+
     <div class="sheet-section">
       <div class="sheet-label">Min rating: <span id="sheet-rating-val">${ratingFilter.min ?? 0}</span>★</div>
       <input type="range" class="sheet-range" min="0" max="5" step="0.5"
@@ -1114,6 +1128,14 @@ function buildFilterSheet() {
              onchange="document.getElementById('favs-only').checked=this.checked; applyFilters()">
       Favourites only
     </label>
+
+    ${ownedAsins.size ? `
+    <div class="sheet-pills" style="margin-bottom:16px">
+      <button class="pill owned-pill ${ownedFilter==='owned'?'active':''}"
+              onclick="setOwnedFilter('owned',this)">Owned</button>
+      <button class="pill owned-pill ${ownedFilter==='unowned'?'active':''}"
+              onclick="setOwnedFilter('unowned',this)">Not Owned</button>
+    </div>` : ''}
 
     <div class="sheet-section">
       <div class="sheet-label">Categories</div>
