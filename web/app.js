@@ -452,16 +452,19 @@ function applyFilters() {
     // Quick type pill
     if (quickType && s.type !== quickType) return false;
 
-    // Genre filter (exclude model — checked = visible)
-    if (excludedGenres.size > 0 && s.genre && excludedGenres.has(s.genre)) return false;
+    // Genre filter — also hides genre-less items when filter is active
+    if (excludedGenres.size > 0) {
+      if (!s.genre || excludedGenres.has(s.genre)) return false;
+    }
 
-    // Category filter (exclude: hide items where any path node is excluded)
+    // Category filter — only tests the most-specific (last) node in each path so that
+    // checking a leaf doesn't get blocked by its still-excluded ancestors.
+    // Items with no categories are also hidden when the filter is active.
     if (excludedCategories.size > 0) {
       const paths = Array.isArray(s.categories) ? s.categories : [];
-      if (paths.length > 0) {
-        const excluded = paths.some(path => path.some(node => excludedCategories.has(node)));
-        if (excluded) return false;
-      }
+      if (paths.length === 0) return false; // no categories → hidden when filter active
+      const hasMatch = paths.some(path => path.length > 0 && !excludedCategories.has(path[path.length - 1]));
+      if (!hasMatch) return false;
     }
 
     // Region filter (treat null/missing region as 'us')
