@@ -12,7 +12,7 @@ DATA_FILE = ROOT / "data" / "sales.json"
 CSV_FILE  = ROOT / "data" / "sales.csv"
 
 CSV_FIELDS = [
-    "region","type","asin","title","author","narrator","genre","tags",
+    "region","type","asin","title","author","narrator","genre","categories","tags",
     "length_hours","rating","rating_count","price","regular_price",
     "cover_url","audible_url",
 ]
@@ -117,6 +117,7 @@ def _parse_card(card, sale_type: str, region: str = "us", base: str = "https://w
         "author":        author,
         "narrator":      narrator,
         "genre":         None,
+        "categories":    None,
         "length_hours":  length_hours,
         "rating":        rating,
         "rating_count":  rating_count,
@@ -224,6 +225,7 @@ def _fetch_daily_deal(asin: str, base: str = "https://www.audible.com", region: 
             "author":        ", ".join(c.get("name","") for c in authors if c.get("name")),
             "narrator":      ", ".join(n.get("name","") for n in narrs   if n.get("name")),
             "genre":         None,
+            "categories":    None,
             "tags":          None,
             "length_hours":  round(runtime / 60, 1) if runtime else None,
             "rating":        float(overall.get("display_average_rating", 0) or 0) or None,
@@ -370,27 +372,38 @@ def scrape_promos(base: str, ovr: str, auth_file: pathlib.Path, region: str) -> 
 # Tag enrichment via Audible API
 # ---------------------------------------------------------------------------
 
-def _extract_tags(product: dict) -> tuple[str, str | None]:
-    """Returns (tags_string, top_level_genre)."""
-    tags = []
-    genre = None
+def _extract_categories(product: dict) -> list[list[str]]:
+    """Extract full category hierarchy as array of paths (one per ladder)."""
+    result = []
     for ladder in (product.get("category_ladders") or []):
-        for rung in (ladder.get("ladder") or []):
-            name = rung.get("name", "").strip()
-            if name and name not in tags:
-                if genre is None:
-                    genre = name          # first rung of first ladder = top-level genre
-                tags.append(name)
+        path = [
+            rung.get("name", "").strip()
+            for rung in (ladder.get("ladder") or [])
+            if rung.get("name", "").strip()
+        ]
+        if path:
+            result.append(path)
+    return result
+
+
+def _extract_tags(product: dict) -> tuple[str, str | None, list[list[str]]]:
+    """Returns (thesaurus_tags_string, genre, categories_array)."""
+    categories = _extract_categories(product)
+    genre = categories[0][0] if categories else None
+
+    tags = []
     for kw in (product.get("thesaurus_subject_keywords") or []):
         kw = kw.strip()
         if not kw:
             continue
         readable = _GENRE_MAP.get(kw.lower(), kw)
         if readable not in tags:
-            if genre is None:
-                genre = readable
             tags.append(readable)
-    return "; ".join(tags), genre
+
+    if genre is None and tags:
+        genre = tags[0]
+
+    return "; ".join(tags), genre, categories
 
 
 _GENRE_MAP = {
@@ -452,7 +465,7 @@ def enrich_tags(sales: list[dict]) -> list[dict]:
     if backfilled:
         print(f"  Backfilled genre for {backfilled} existing items from tags.")
 
-    needs = [s for s in sales if s.get("tags") is None]
+    needs = [s for s in sales if s.get("tags") is None or s.get("categories") is None]
     if not needs:
         print("  Tags already up to date.")
         return sales
@@ -470,12 +483,13 @@ def enrich_tags(sales: list[dict]) -> list[dict]:
             try:
                 resp    = client.get(
                     f"1.0/catalog/products/{asin}",
-                    response_groups="product_attrs,product_desc",
+                    response_groups="product_attrs,product_desc,category_ladders",
                 )
                 product = resp.get("product", resp)
-                tags, genre = _extract_tags(product)
-                by_asin[asin]["tags"]  = tags
-                by_asin[asin]["genre"] = genre
+                tags, genre, categories = _extract_tags(product)
+                by_asin[asin]["tags"]       = tags
+                by_asin[asin]["genre"]      = genre
+                by_asin[asin]["categories"] = categories
             except Exception as e:
                 by_asin[asin]["tags"] = ""
                 print(f"  Warning: could not enrich {asin}: {e}", file=sys.stderr)
@@ -520,7 +534,17 @@ def save(sales: list[dict]) -> None:
     with open(CSV_FILE, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDS, extrasaction="ignore")
         writer.writeheader()
-        writer.writerows(sales)
+        for s in sales:
+            # Flatten categories array → semicolon string for CSV
+            row = dict(s)
+            if isinstance(row.get("categories"), list):
+                seen, flat = set(), []
+                for path in row["categories"]:
+                    for node in path:
+                        if node not in seen:
+                            seen.add(node); flat.append(node)
+                row["categories"] = "; ".join(flat)
+            writer.writerow(row)
 
     by_type = {}
     for s in sales:

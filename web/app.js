@@ -22,7 +22,7 @@ const COLUMNS = [
   { key:'author',        label:'Author',      always:false, def:true,  sort:true,  filter:'list',  dk:'author' },
   { key:'narrator',      label:'Narrator',    always:false, def:false, sort:true,  filter:'list',  dk:'narrator' },
   { key:'genre',         label:'Genre',       always:false, def:false, sort:true,  filter:'list',  dk:'genre' },
-  { key:'tags',          label:'Tags',        always:false, def:false, sort:false, filter:false,   dk:'tags' },
+  { key:'categories',   label:'Categories',  always:false, def:false, sort:false, filter:'tree',  dk:'categories' },
   { key:'length_hours',  label:'Length (h)',  always:false, def:true,  sort:true,  filter:'range', dk:'length_hours' },
   { key:'rating',        label:'Rating',      always:false, def:true,  sort:true,  filter:'range', dk:'rating' },
   { key:'rating_count',  label:'# Ratings',  always:false, def:true,  sort:true,  filter:'range', dk:'rating_count' },
@@ -51,9 +51,9 @@ let openFilterKey = null;
 // Quick filter state
 let quickType        = '';
 let activeGenres     = new Set();
-let selectedTags     = new Set();
-let searchQuery      = '';
-let ownedFilter      = ''; // '' | 'owned' | 'unowned'
+let searchQuery        = '';
+let ownedFilter        = ''; // '' | 'owned' | 'unowned'
+let selectedCategories = new Set(); // category names checked in tree
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
@@ -78,7 +78,6 @@ async function init() {
 
     buildTypePills();
     buildGenrePills();
-    buildTagsPanel();
     restoreLibation();
     updateTableHeight();
     renderHeader();
@@ -209,44 +208,87 @@ function toggleGenrePill(genre, btn) {
   applyFilters();
 }
 
-// ─── Tags dropdown ────────────────────────────────────────────────────────────
-function buildTagsPanel() {
-  const allTags = new Set();
-  allSales.forEach(s => {
-    if (s.tags) s.tags.split(';').forEach(t => { const v = t.trim(); if (v) allTags.add(v); });
-  });
+// ─── Category tree ────────────────────────────────────────────────────────────
 
-  const panel = document.getElementById('tags-selector');
-  if (allTags.size === 0) {
-    panel.innerHTML = '<p class="cs-empty">No tags available yet.<br>Tags will appear after genre enrichment is added to the scraper.</p>';
-    return;
+function _buildTree() {
+  // Returns nested object: { nodeName: { children: {}, count: N } }
+  const tree = {};
+  for (const s of allSales) {
+    for (const path of (Array.isArray(s.categories) ? s.categories : [])) {
+      let node = tree;
+      for (const name of path) {
+        if (!node[name]) node[name] = { children: {}, count: 0 };
+        node[name].count++;
+        node = node[name].children;
+      }
+    }
   }
-
-  panel.innerHTML = [...allTags].sort().map(t =>
-    `<label class="cs-item">
-      <input type="checkbox" value="${esc(t)}" onchange="toggleTag('${esc(t)}', this.checked)">
-      ${esc(t)}
-    </label>`
-  ).join('');
+  return tree;
 }
 
-function toggleTagsPanel() {
-  const p = document.getElementById('tags-selector');
+function _renderTree(node, depth = 0) {
+  return Object.entries(node).sort(([a],[b]) => a.localeCompare(b)).map(([name, data]) => {
+    const hasChildren = Object.keys(data.children).length > 0;
+    const checked     = selectedCategories.has(name) ? 'checked' : '';
+    const childHtml   = hasChildren ? `<div class="cat-children">${_renderTree(data.children, depth+1)}</div>` : '';
+    return `<div class="cat-node">
+      <label class="cat-label">
+        ${hasChildren ? `<span class="cat-toggle" onclick="toggleCatNode(this)">▶</span>` : '<span class="cat-toggle-spacer"></span>'}
+        <input type="checkbox" value="${esc(name)}" ${checked} onchange="toggleCatFilter('${esc(name)}',this.checked)">
+        <span>${esc(name)}</span>
+        <small class="cat-count">${data.count}</small>
+      </label>
+      ${childHtml}
+    </div>`;
+  }).join('');
+}
+
+function buildCategoryPanel(container) {
+  const tree = _buildTree();
+  if (!Object.keys(tree).length) {
+    container.innerHTML = '<p class="cs-empty">No categories yet — run the scraper to populate.</p>';
+    return;
+  }
+  container.innerHTML = `
+    <div class="cat-actions">
+      <button onclick="clearCatFilter()">Clear all</button>
+    </div>
+    <div class="cat-tree">${_renderTree(tree)}</div>`;
+}
+
+function toggleCatNode(arrow) {
+  const children = arrow.closest('.cat-node').querySelector('.cat-children');
+  if (!children) return;
+  const open = children.style.display === 'block';
+  children.style.display = open ? 'none' : 'block';
+  arrow.textContent = open ? '▶' : '▼';
+}
+
+function toggleCatFilter(name, checked) {
+  checked ? selectedCategories.add(name) : selectedCategories.delete(name);
+  document.getElementById('cats-btn')?.classList.toggle('active', selectedCategories.size > 0);
+  renderHeader(); applyFilters();
+}
+
+function clearCatFilter() {
+  selectedCategories.clear();
+  document.querySelectorAll('.cat-tree input[type=checkbox]').forEach(i => i.checked = false);
+  document.getElementById('cats-btn')?.classList.remove('active');
+  renderHeader(); applyFilters();
+}
+
+function toggleCatsPanel() {
+  const p = document.getElementById('cats-selector');
   p.hidden = !p.hidden;
   if (!p.hidden) {
+    buildCategoryPanel(p);
     const onOut = e => {
-      if (p.contains(e.target) || e.target.closest('#tags-btn')) return;
+      if (p.contains(e.target) || e.target.closest('#cats-btn')) return;
       p.hidden = true;
       document.removeEventListener('mousedown', onOut);
     };
     setTimeout(() => document.addEventListener('mousedown', onOut), 0);
   }
-}
-
-function toggleTag(tag, checked) {
-  checked ? selectedTags.add(tag) : selectedTags.delete(tag);
-  document.getElementById('tags-btn').classList.toggle('active', selectedTags.size > 0);
-  applyFilters();
 }
 
 // ─── Filter logic ─────────────────────────────────────────────────────────────
@@ -257,6 +299,7 @@ function isFilterActive(dk) {
   if (f.type === 'list')  return f.excluded.size > 0;
   if (f.type === 'range') return f.min != null || f.max != null;
   if (f.type === 'price') return !f.includeCredit || f.min != null || f.max != null;
+  if (dk === 'categories') return selectedCategories.size > 0;
   return false;
 }
 
@@ -280,12 +323,11 @@ function applyFilters() {
     // Quick genre pills (OR within genres, AND with other filters)
     if (activeGenres.size > 0 && !activeGenres.has(s.genre)) return false;
 
-    // Tags filter (OR: item must have at least one selected tag)
-    if (selectedTags.size > 0) {
-      const itemTags = new Set(
-        s.tags ? s.tags.split(';').map(t => t.trim()).filter(Boolean) : []
-      );
-      if (![...selectedTags].some(t => itemTags.has(t))) return false;
+    // Category tree filter (OR: item must have at least one selected node in any path)
+    if (selectedCategories.size > 0) {
+      const paths = Array.isArray(s.categories) ? s.categories : [];
+      const match = paths.some(path => path.some(node => selectedCategories.has(node)));
+      if (!match) return false;
     }
 
     // Region filter (treat null/missing region as 'us')
@@ -508,9 +550,11 @@ function buildCell(sale, col) {
     case 'length_hours':
       td.textContent = sale.length_hours != null ? sale.length_hours.toFixed(1) + ' h' : '';
       td.className = 'num'; break;
-    case 'tags':
-      td.textContent = sale.tags || '';
+    case 'categories': {
+      const paths = Array.isArray(sale.categories) ? sale.categories : [];
+      td.textContent = paths.map(p => p.join(' › ')).join('; ');
       td.className = 'tags-cell'; break;
+    }
     case 'owned': {
       td.textContent = ownedAsins.has(sale.asin) ? '✓' : '';
       td.style.color = 'var(--green)';
@@ -542,6 +586,7 @@ function openFilter(colKey, anchor) {
   if (col.filter === 'list')   buildListPanel(panel, col);
   else if (col.filter === 'text')  buildTextPanel(panel, col);
   else if (col.filter === 'price') buildPricePanel(panel, col);
+  else if (col.filter === 'tree')  buildCategoryPanel(panel);
   else                             buildRangePanel(panel, col);
   document.body.appendChild(panel);
 
@@ -903,7 +948,7 @@ function closeFilterSheet() {
 function resetFilters() {
   quickType = '';
   activeGenres.clear();
-  selectedTags.clear();
+  selectedCategories.clear();
   colFilters = {};
   document.getElementById('favs-only').checked = false;
   buildFilterSheet();
@@ -912,10 +957,6 @@ function resetFilters() {
 
 function buildFilterSheet() {
   const types = [...new Set(allSales.map(s => s.type).filter(Boolean))].sort();
-  const allTags = new Set();
-  allSales.forEach(s => {
-    if (s.tags) s.tags.split(';').forEach(t => { const v = t.trim(); if (v) allTags.add(v); });
-  });
   const ratingFilter = colFilters['rating'] || {};
   const favsOnly     = document.getElementById('favs-only').checked;
 
@@ -938,12 +979,6 @@ function buildFilterSheet() {
     return `<button class="pill ${active}" onclick="setTypeFilter('${esc(t)}',this)">${label}</button>`;
   }).join('');
 
-  const tagItems = [...allTags].sort().map(t => `
-    <label class="sheet-check">
-      <input type="checkbox" value="${esc(t)}" ${selectedTags.has(t) ? 'checked' : ''}
-             onchange="toggleTag('${esc(t)}',this.checked)">
-      ${esc(t)}
-    </label>`).join('');
 
   document.getElementById('sheet-body').innerHTML = `
     <div class="sheet-section">
@@ -986,11 +1021,10 @@ function buildFilterSheet() {
       Favourites only
     </label>
 
-    ${allTags.size ? `
     <div class="sheet-section">
-      <div class="sheet-label">Tags</div>
-      <div class="sheet-tag-list">${tagItems}</div>
-    </div>` : ''}
+      <div class="sheet-label">Categories</div>
+      <div id="sheet-cat-tree" class="sheet-tag-list"></div>
+    </div>
 
     <div class="sheet-section">
       <div class="sheet-label">Libation (owned books)</div>
@@ -998,6 +1032,9 @@ function buildFilterSheet() {
       <div class="libation-status" style="margin-top:4px">${document.getElementById('libation-status').textContent}</div>
     </div>
   `;
+  // Populate category tree inside sheet
+  const catContainer = document.getElementById('sheet-cat-tree');
+  if (catContainer) buildCategoryPanel(catContainer);
 }
 
 function setMobileSort(key) {
