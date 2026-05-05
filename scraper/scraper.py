@@ -392,9 +392,9 @@ def enrich_tags(sales: list[dict]) -> list[dict]:
     print(f"  Enriching {len(needs)} items with Audible category data...")
     print("  (First run may take several minutes — subsequent runs only process new items)")
 
-    auth   = audible.Authenticator.from_file(AUTH_FILE)
+    auth    = audible.Authenticator.from_file(SCRAPER_DIR / "auth.json")
     by_asin = {s["asin"]: s for s in sales}
-    done   = 0
+    done    = 0
 
     with audible.Client(auth=auth) as client:
         for sale in needs:
@@ -412,6 +412,7 @@ def enrich_tags(sales: list[dict]) -> list[dict]:
             done += 1
             if done % 100 == 0:
                 print(f"  Enriched {done}/{len(needs)}...")
+            import time; time.sleep(0.15)  # ~6-7 req/s, well within API limits
 
     print(f"  Done enriching {len(needs)} items.")
     return list(by_asin.values())
