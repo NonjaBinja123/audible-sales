@@ -34,7 +34,7 @@ REGION_CONFIGS = {
     },
 }
 
-ENABLED_REGIONS = ["us", "ca"]
+ENABLED_REGIONS = [r.strip() for r in os.environ.get("AUDIBLE_REGIONS", "us").split(",") if r.strip()]
 
 
 # ---------------------------------------------------------------------------
