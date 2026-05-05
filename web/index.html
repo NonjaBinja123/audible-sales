@@ -48,6 +48,7 @@
           <option value="ca">🇨🇦 Canada</option>
         </select>
       </div>
+      <button id="clear-filters-btn" onclick="clearAllFilters()" hidden>✕ Clear filters</button>
       <div id="count"></div>
     </div>
     <div id="quick-filters">
@@ -57,7 +58,10 @@
       <div id="type-pills"></div>
       <div class="pill-divider"></div>
       <div id="owned-pills" hidden></div>
-      <div id="genre-pills"></div>
+      <div class="col-picker" id="genre-picker">
+        <button id="genre-btn" onclick="toggleGenrePanel()">Genre ▾</button>
+        <div id="genre-selector" class="col-panel genre-panel" hidden></div>
+      </div>
       <div class="col-picker" id="cats-picker">
         <button id="cats-btn" onclick="toggleCatsPanel()">Categories ▾</button>
         <div id="cats-selector" class="col-panel cat-panel" hidden></div>

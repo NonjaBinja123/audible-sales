@@ -53,7 +53,7 @@ let quickType        = '';
 let activeGenres     = new Set();
 let searchQuery        = '';
 let ownedFilter        = ''; // '' | 'owned' | 'unowned'
-let selectedCategories = new Set(); // category names checked in tree
+let excludedCategories = new Set(); // category names unchecked in tree (default = all checked)
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
@@ -77,7 +77,7 @@ async function init() {
     document.getElementById('mobile-updated').textContent = ts;
 
     buildTypePills();
-    buildGenrePills();
+    buildGenrePanel();
     restoreLibation();
     updateTableHeight();
     renderHeader();
@@ -187,24 +187,79 @@ function setOwnedFilter(val, btn) {
   applyFilters();
 }
 
-function buildGenrePills() {
-  const genres = [...new Set(allSales.map(s => s.genre).filter(Boolean))].sort();
-  const container = document.getElementById('genre-pills');
-  container.innerHTML = genres.map(g =>
-    `<button class="pill" data-genre="${esc(g)}" onclick="toggleGenrePill('${esc(g)}', this)">${esc(g)}</button>`
-  ).join('');
-  // hide divider if no genres
-  document.querySelector('.pill-divider').style.display = genres.length ? '' : 'none';
+function buildGenrePanel() {
+  const genres  = [...new Set(allSales.map(s => s.genre).filter(Boolean))].sort();
+  const panel   = document.getElementById('genre-selector');
+  const divider = document.querySelector('.pill-divider');
+  if (!genres.length) {
+    if (divider) divider.style.display = 'none';
+    document.getElementById('genre-picker').style.display = 'none';
+    return;
+  }
+  if (divider) divider.style.display = '';
+  panel.innerHTML = `
+    <div class="fp-head">
+      <strong>Genre</strong>
+      <div class="fp-actions">
+        <button onclick="clearGenreFilter()">Clear</button>
+      </div>
+    </div>
+    <div class="fp-list">
+      ${genres.map(g => `
+        <label class="fp-item">
+          <input type="checkbox" value="${esc(g)}" ${activeGenres.has(g)?'checked':''}
+                 onchange="toggleGenrePill('${esc(g)}',this.checked)">
+          ${esc(g)}
+        </label>`).join('')}
+    </div>`;
 }
 
-function toggleGenrePill(genre, btn) {
-  if (activeGenres.has(genre)) {
-    activeGenres.delete(genre);
-    btn.classList.remove('active');
-  } else {
-    activeGenres.add(genre);
-    btn.classList.add('active');
+function toggleGenrePanel() {
+  const p = document.getElementById('genre-selector');
+  p.hidden = !p.hidden;
+  if (!p.hidden) {
+    buildGenrePanel();
+    const onOut = e => {
+      if (p.contains(e.target) || e.target.closest('#genre-btn')) return;
+      p.hidden = true;
+      document.removeEventListener('mousedown', onOut);
+    };
+    setTimeout(() => document.addEventListener('mousedown', onOut), 0);
   }
+}
+
+function clearGenreFilter() {
+  activeGenres.clear();
+  document.querySelectorAll('#genre-selector .fp-item input').forEach(i => i.checked = false);
+  document.getElementById('genre-btn').classList.remove('active');
+  applyFilters();
+}
+
+function clearAllFilters() {
+  quickType = ''; searchQuery = ''; ownedFilter = '';
+  activeGenres.clear(); excludedCategories.clear(); colFilters = {};
+  document.getElementById('title-search').value = '';
+  document.getElementById('favs-only').checked = false;
+  document.querySelectorAll('#type-pills .pill').forEach(p => p.classList.remove('active'));
+  document.querySelector('#type-pills .pill')?.classList.add('active'); // re-activate "All"
+  document.querySelectorAll('#owned-pills .pill').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.cat-tree input[type=checkbox]').forEach(i => {
+    i.checked = true; i.indeterminate = false;
+  });
+  document.getElementById('cats-btn')?.classList.remove('active');
+  document.getElementById('genre-btn')?.classList.remove('active');
+  renderHeader(); applyFilters(); _updateClearBtn();
+}
+
+function _updateClearBtn() {
+  const active = quickType || searchQuery || ownedFilter ||
+    activeGenres.size > 0 || excludedCategories.size > 0 || Object.keys(colFilters).length > 0;
+  document.getElementById('clear-filters-btn').hidden = !active;
+}
+
+function toggleGenrePill(genre, checked) {
+  checked ? activeGenres.add(genre) : activeGenres.delete(genre);
+  document.getElementById('genre-btn')?.classList.toggle('active', activeGenres.size > 0);
   applyFilters();
 }
 
@@ -229,12 +284,12 @@ function _buildTree() {
 function _renderTree(node, depth = 0) {
   return Object.entries(node).sort(([a],[b]) => a.localeCompare(b)).map(([name, data]) => {
     const hasChildren = Object.keys(data.children).length > 0;
-    const checked     = selectedCategories.has(name) ? 'checked' : '';
+    const checked     = !excludedCategories.has(name) ? 'checked' : '';
     const childHtml   = hasChildren ? `<div class="cat-children">${_renderTree(data.children, depth+1)}</div>` : '';
     return `<div class="cat-node">
       <label class="cat-label">
         ${hasChildren ? `<span class="cat-toggle" onclick="toggleCatNode(this)">▶</span>` : '<span class="cat-toggle-spacer"></span>'}
-        <input type="checkbox" value="${esc(name)}" ${checked} onchange="toggleCatFilter('${esc(name)}',this.checked)">
+        <input type="checkbox" value="${esc(name)}" ${checked} onchange="toggleCatFilter('${esc(name)}',this.checked,this)">
         <span>${esc(name)}</span>
         <small class="cat-count">${data.count}</small>
       </label>
@@ -264,15 +319,51 @@ function toggleCatNode(arrow) {
   arrow.textContent = open ? '▶' : '▼';
 }
 
-function toggleCatFilter(name, checked) {
-  checked ? selectedCategories.add(name) : selectedCategories.delete(name);
-  document.getElementById('cats-btn')?.classList.toggle('active', selectedCategories.size > 0);
+function toggleCatFilter(name, checked, cb) {
+  if (!checked) excludedCategories.add(name);
+  else          excludedCategories.delete(name);
+
+  // Propagate to children
+  if (cb) {
+    cb.closest('.cat-node')?.querySelectorAll('.cat-children input[type=checkbox]').forEach(child => {
+      child.checked = checked;
+      child.indeterminate = false;
+      if (!checked) excludedCategories.add(child.value);
+      else          excludedCategories.delete(child.value);
+    });
+  }
+
+  // Update indeterminate on all open panels
+  [document.querySelector('#cats-selector .cat-tree'),
+   document.querySelector('#sheet-cat-tree .cat-tree')
+  ].filter(Boolean).forEach(_updateIndeterminate);
+
+  document.getElementById('cats-btn')?.classList.toggle('active', excludedCategories.size > 0);
   renderHeader(); applyFilters();
 }
 
+function _updateIndeterminate(treeEl) {
+  // Bottom-up: process leaf parents first
+  [...treeEl.querySelectorAll('.cat-node')].reverse().forEach(node => {
+    const parentCb  = node.querySelector(':scope > .cat-label > input[type=checkbox]');
+    const childCbs  = [...node.querySelectorAll(':scope > .cat-children .cat-node > .cat-label > input[type=checkbox]')];
+    if (!parentCb || !childCbs.length) return;
+    const nChecked = childCbs.filter(c => c.checked || c.indeterminate).length;
+    if (nChecked === 0) {
+      parentCb.checked = false; parentCb.indeterminate = false;
+    } else if (nChecked === childCbs.length && childCbs.every(c => c.checked && !c.indeterminate)) {
+      parentCb.checked = true;  parentCb.indeterminate = false;
+    } else {
+      parentCb.checked = false; parentCb.indeterminate = true;
+    }
+  });
+}
+
 function clearCatFilter() {
-  selectedCategories.clear();
-  document.querySelectorAll('.cat-tree input[type=checkbox]').forEach(i => i.checked = false);
+  excludedCategories.clear();
+  document.querySelectorAll('.cat-tree input[type=checkbox]').forEach(i => {
+    i.checked = true; i.indeterminate = false;
+  });
   document.getElementById('cats-btn')?.classList.remove('active');
   renderHeader(); applyFilters();
 }
@@ -299,7 +390,7 @@ function isFilterActive(dk) {
   if (f.type === 'list')  return f.excluded.size > 0;
   if (f.type === 'range') return f.min != null || f.max != null;
   if (f.type === 'price') return !f.includeCredit || f.min != null || f.max != null;
-  if (dk === 'categories') return selectedCategories.size > 0;
+  if (dk === 'categories') return excludedCategories.size > 0;
   return false;
 }
 
@@ -323,11 +414,13 @@ function applyFilters() {
     // Quick genre pills (OR within genres, AND with other filters)
     if (activeGenres.size > 0 && !activeGenres.has(s.genre)) return false;
 
-    // Category tree filter (OR: item must have at least one selected node in any path)
-    if (selectedCategories.size > 0) {
+    // Category tree filter (exclude: item hidden if any of its nodes are excluded)
+    if (excludedCategories.size > 0) {
       const paths = Array.isArray(s.categories) ? s.categories : [];
-      const match = paths.some(path => path.some(node => selectedCategories.has(node)));
-      if (!match) return false;
+      if (paths.length > 0) {
+        const excluded = paths.some(path => path.some(node => excludedCategories.has(node)));
+        if (excluded) return false;
+      }
     }
 
     // Region filter (treat null/missing region as 'us')
@@ -363,6 +456,7 @@ function applyFilters() {
   });
 
   applySort();
+  _updateClearBtn();
 }
 
 // ─── Sort ─────────────────────────────────────────────────────────────────────
@@ -948,7 +1042,7 @@ function closeFilterSheet() {
 function resetFilters() {
   quickType = '';
   activeGenres.clear();
-  selectedCategories.clear();
+  excludedCategories.clear();
   colFilters = {};
   document.getElementById('favs-only').checked = false;
   buildFilterSheet();
