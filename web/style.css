@@ -197,6 +197,7 @@ input[type="file"] { font-size:12px; }
 .cat-actions { padding:6px 10px; border-bottom:1px solid var(--border); }
 .cat-actions button { font-size:11px; padding:2px 8px; border:1px solid var(--border); border-radius:3px; background:var(--surface); cursor:pointer; }
 .cat-actions button:hover { border-color:var(--orange); color:var(--orange); }
+.cat-tree-wrap { overflow-y:auto; flex:1; min-height:0; }
 .cat-tree { padding:4px 0; }
 .cat-node { }
 .cat-label { display:flex; align-items:center; gap:6px; padding:4px 8px; cursor:default; font-size:13px; white-space:nowrap; }
