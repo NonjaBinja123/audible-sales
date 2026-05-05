@@ -34,6 +34,22 @@ const COLUMNS = [
   { key:'asin',          label:'ASIN',        always:false, def:false, sort:false, filter:false,   dk:'asin' },
 ];
 
+// ─── Card field definitions (mobile) ─────────────────────────────────────────
+const CARD_FIELD_DEFS = [
+  { key:'narrator',     label:'Narrator',    fmt: s => s.narrator || null },
+  { key:'genre',        label:'Genre',       fmt: s => s.genre || null },
+  { key:'length_hours', label:'Length',      fmt: s => s.length_hours != null ? s.length_hours.toFixed(1) + 'h' : null },
+  { key:'rating',       label:'Rating',      fmt: s => s.rating != null ? '★ ' + s.rating.toFixed(1) : null },
+  { key:'rating_count', label:'# Ratings',   fmt: s => s.rating_count != null ? s.rating_count.toLocaleString() + ' ratings' : null },
+  { key:'bayesian',     label:'Bayesian',    fmt: s => s.bayesian != null ? 'Bayes ' + s.bayesian.toFixed(2) : null },
+  { key:'weighted',     label:'Weighted',    fmt: s => s.weighted != null ? 'Score ' + s.weighted.toFixed(2) : null },
+  { key:'price',        label:'Price',       fmt: s => s.type === '2for1' ? '1 credit' : (s.price != null ? '$' + s.price.toFixed(2) : null) },
+];
+const CARD_FIELD_MAX = 5;
+let cardFields = new Set(
+  JSON.parse(localStorage.getItem('audible_card_fields') || '["narrator","rating"]')
+);
+
 // ─── State ────────────────────────────────────────────────────────────────────
 let allSales      = [];
 let filtered      = [];
@@ -1072,6 +1088,8 @@ function renderCards() {
     return;
   }
 
+  const sortDef = CARD_FIELD_DEFS.find(d => d.key === sortKey);
+
   const frag = document.createDocumentFragment();
   for (const sale of filtered) {
     const card = document.createElement('a');
@@ -1101,38 +1119,60 @@ function renderCards() {
     authorEl.className = 'card-meta';
     authorEl.textContent = sale.author || '';
 
-    const narratorEl = document.createElement('div');
-    narratorEl.className = 'card-meta card-narrator';
-    narratorEl.textContent = sale.narrator || '';
+    det.appendChild(titleEl);
+    det.appendChild(authorEl);
 
+    // Optional field chips
+    const activeFields = CARD_FIELD_DEFS.filter(d => cardFields.has(d.key));
+    if (activeFields.length) {
+      const chipRow = document.createElement('div');
+      chipRow.className = 'card-chips';
+      for (const def of activeFields) {
+        const val = def.fmt(sale);
+        if (!val) continue;
+        const chip = document.createElement('span');
+        chip.className = 'card-chip';
+        chip.textContent = val;
+        chipRow.appendChild(chip);
+      }
+      if (chipRow.children.length) det.appendChild(chipRow);
+    }
+
+    // Footer
     const footer = document.createElement('div');
     footer.className = 'card-footer';
 
-    // Type badge
+    // Sale type badge
     const badge = document.createElement('span');
     badge.className = `badge badge-${sale.type}`;
     badge.textContent = TYPE_LABELS[sale.type] || sale.type;
     footer.appendChild(badge);
 
-    // Price
-    if (sale.type === '2for1') {
-      const cp = document.createElement('span');
-      cp.className = 'card-price credit';
-      cp.textContent = '1 credit';
-      footer.appendChild(cp);
-    } else if (sale.price != null) {
-      const cp = document.createElement('span');
-      cp.className = 'card-price';
-      cp.textContent = '$' + sale.price.toFixed(2);
-      footer.appendChild(cp);
+    // Sort value — always shown if sorted by a displayable field not already in chips
+    if (sortDef && !cardFields.has(sortKey)) {
+      const val = sortDef.fmt(sale);
+      if (val) {
+        const sv = document.createElement('span');
+        sv.className = 'card-chip card-sort-val';
+        sv.textContent = val;
+        sv.title = sortDef.label;
+        footer.appendChild(sv);
+      }
     }
 
-    // Rating
-    if (sale.rating != null) {
-      const r = document.createElement('span');
-      r.className = 'card-rating';
-      r.textContent = '★ ' + sale.rating.toFixed(1);
-      footer.appendChild(r);
+    // Price — shown in footer only if not already a chip field
+    if (!cardFields.has('price')) {
+      if (sale.type === '2for1') {
+        const cp = document.createElement('span');
+        cp.className = 'card-price credit';
+        cp.textContent = '1 credit';
+        footer.appendChild(cp);
+      } else if (sale.price != null) {
+        const cp = document.createElement('span');
+        cp.className = 'card-price';
+        cp.textContent = '$' + sale.price.toFixed(2);
+        footer.appendChild(cp);
+      }
     }
 
     // Owned badge
@@ -1142,22 +1182,36 @@ function renderCards() {
       footer.appendChild(ob);
     }
 
-    // Fav (stop propagation so tap doesn't open Audible)
+    // Fav
     const favBtn = document.createElement('button');
     favBtn.className = 'star-btn' + (favorites.has(sale.asin) ? ' active' : '');
     favBtn.textContent = '★';
     favBtn.onclick = e => { e.preventDefault(); e.stopPropagation(); toggleFav(sale.asin, favBtn); };
     footer.appendChild(favBtn);
 
-    det.appendChild(titleEl);
-    det.appendChild(authorEl);
-    det.appendChild(narratorEl);
     det.appendChild(footer);
     card.appendChild(coverDiv);
     card.appendChild(det);
     frag.appendChild(card);
   }
   container.replaceChildren(frag);
+}
+
+function toggleCardField(key, cb) {
+  if (cb.checked) {
+    if (cardFields.size >= CARD_FIELD_MAX) { cb.checked = false; return; }
+    cardFields.add(key);
+  } else {
+    cardFields.delete(key);
+  }
+  localStorage.setItem('audible_card_fields', JSON.stringify([...cardFields]));
+  // Update counter and disabled states in-place (avoids sheet scroll-to-top)
+  const counter = document.querySelector('.card-field-count');
+  if (counter) counter.textContent = `(${cardFields.size}/${CARD_FIELD_MAX})`;
+  document.querySelectorAll('.card-field-toggle').forEach(inp => {
+    if (!inp.checked) inp.disabled = cardFields.size >= CARD_FIELD_MAX;
+  });
+  renderCards();
 }
 
 // ─── Mobile: filter sheet ─────────────────────────────────────────────────────
@@ -1338,6 +1392,24 @@ function buildFilterSheet() {
       <div class="sheet-label">Libation (owned books)</div>
       <input type="file" accept=".csv" onchange="loadLibation(this.files[0])">
       <div class="libation-status" style="margin-top:4px">${document.getElementById('libation-status').textContent}</div>
+    </div>
+
+    <div class="sheet-section">
+      <div class="sheet-label" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Card fields</span>
+        <span class="card-field-count" style="font-weight:400;color:var(--muted)">(${cardFields.size}/${CARD_FIELD_MAX})</span>
+      </div>
+      <div class="sheet-tag-list">
+        ${CARD_FIELD_DEFS.map(d => `
+          <label class="sheet-check">
+            <input type="checkbox" class="card-field-toggle"
+                   value="${d.key}"
+                   ${cardFields.has(d.key) ? 'checked' : ''}
+                   ${!cardFields.has(d.key) && cardFields.size >= CARD_FIELD_MAX ? 'disabled' : ''}
+                   onchange="toggleCardField('${d.key}', this)">
+            ${d.label}
+          </label>`).join('')}
+      </div>
     </div>
   `;
   // Populate category tree inside sheet (requestAnimationFrame ensures DOM is ready)

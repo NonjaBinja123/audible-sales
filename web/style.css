@@ -522,6 +522,31 @@ td a:hover { color:var(--orange); text-decoration:underline; }
   .card-price { font-size:13px; font-weight:700; color:var(--green); }
   .card-price.credit { color:var(--purple); font-size:11px; }
   .card-rating { font-size:12px; color:var(--muted); margin-left:auto; }
+
+  /* Configurable field chips */
+  .card-chips {
+    display:flex;
+    flex-wrap:wrap;
+    gap:4px;
+    margin-top:3px;
+  }
+  .card-chip {
+    font-size:11px;
+    padding:2px 7px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    background:var(--bg);
+    color:var(--muted);
+    white-space:nowrap;
+    max-width:160px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .card-sort-val {
+    border-color:var(--orange);
+    color:var(--orange);
+    background:transparent;
+  }
   .card-footer .star-btn { font-size:20px; }
 
   /* Overlay */
