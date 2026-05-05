@@ -5,11 +5,26 @@ const BAYESIAN_M = 100;
 
 let regionFilter = localStorage.getItem('audible_region') || 'us';
 
+const REGION_FLAGS = { us:'🇺🇸', ca:'🇨🇦', uk:'🇬🇧', au:'🇦🇺', de:'🇩🇪', fr:'🇫🇷', jp:'🇯🇵' };
+const REGION_LABELS = { us:'US', ca:'CA', uk:'UK', au:'AU', de:'DE', fr:'FR', jp:'JP' };
+
 function setRegion(code) {
   regionFilter = code;
   localStorage.setItem('audible_region', code);
   document.getElementById('region-select').value = code;
+  _syncMobileRegion();
   applyFilters();
+}
+
+function _syncMobileRegion() {
+  const btn = document.getElementById('mobile-region');
+  if (btn) btn.textContent = (REGION_FLAGS[regionFilter] || '') + ' ' + (REGION_LABELS[regionFilter] || regionFilter.toUpperCase());
+}
+
+function cycleMobileRegion() {
+  const regions = [...document.getElementById('region-select').options].map(o => o.value);
+  const idx = regions.indexOf(regionFilter);
+  setRegion(regions[(idx + 1) % regions.length]);
 }
 
 // ─── Column definitions ───────────────────────────────────────────────────────
@@ -131,6 +146,7 @@ function cycleTheme() {
 async function init() {
   showTosBanner();
   _syncThemeBtn();
+  _syncMobileRegion();
   document.getElementById('region-select').value = regionFilter;
   buildColSelector();
 
