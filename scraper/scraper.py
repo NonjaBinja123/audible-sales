@@ -23,14 +23,16 @@ SCRAPER_DIR = pathlib.Path(__file__).parent
 
 REGION_CONFIGS = {
     "us": {
-        "base":      "https://www.audible.com",
-        "ovr":       "overrideBaseCountry=true&ipRedirectOverride=true",
-        "auth_file": SCRAPER_DIR / "auth.json",
+        "base":        "https://www.audible.com",
+        "ovr":         "overrideBaseCountry=true&ipRedirectOverride=true",
+        "auth_file":   SCRAPER_DIR / "auth.json",
+        "deals_path":  "/ep/audiobook-deals",
     },
     "ca": {
-        "base":      "https://www.audible.ca",
-        "ovr":       "",
-        "auth_file": SCRAPER_DIR / "auth_ca.json",
+        "base":        "https://www.audible.ca",
+        "ovr":         "",
+        "auth_file":   SCRAPER_DIR / "auth_ca.json",
+        "deals_path":  "/ep/monthly-deals-all",
     },
 }
 
@@ -240,10 +242,9 @@ def _fetch_daily_deal(asin: str, base: str = "https://www.audible.com", region: 
 # Monthly deals (public — no auth needed)
 # ---------------------------------------------------------------------------
 
-def scrape_monthly(base: str, ovr: str, region: str) -> list[dict]:
+def scrape_monthly(base: str, ovr: str, region: str, deals_path: str = "/ep/audiobook-deals") -> list[dict]:
     session = _make_session()
-    sep = "?" if "?" not in base else "&"
-    url = f"{base}/ep/audiobook-deals?{ovr}" if ovr else f"{base}/ep/audiobook-deals"
+    url = f"{base}{deals_path}?{ovr}" if ovr else f"{base}{deals_path}"
     print(f"  Starting at {url}")
 
     # Identify daily deal ASIN from page 0 before full scrape
@@ -487,7 +488,7 @@ def main() -> None:
         base, ovr, auth_file = cfg["base"], cfg["ovr"], cfg["auth_file"]
 
         print(f"\n=== [{region_code.upper()}] Monthly deals ===")
-        monthly = scrape_monthly(base, ovr, region_code)
+        monthly = scrape_monthly(base, ovr, region_code, cfg.get("deals_path", "/ep/audiobook-deals"))
         print(f"  Total: {len(monthly)}")
         all_monthly.extend(monthly)
 
