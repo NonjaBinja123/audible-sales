@@ -203,7 +203,8 @@ function buildGenrePanel() {
     <div class="fp-head">
       <strong>Genre</strong>
       <div class="fp-actions">
-        <button onclick="clearGenreFilter()">Clear</button>
+        <button onclick="selectAllGenres()">Select all</button>
+        <button onclick="clearGenreFilter()">Uncheck all</button>
       </div>
     </div>
     <div class="fp-list">
@@ -230,11 +231,20 @@ function toggleGenrePanel() {
   }
 }
 
-function clearGenreFilter() {
+function selectAllGenres() {
   excludedGenres.clear();
   const p = document.getElementById('genre-selector');
   if (p && !p.hidden) buildGenrePanel();
   document.getElementById('genre-btn')?.classList.remove('active');
+  applyFilters();
+}
+
+function clearGenreFilter() {
+  const genres = [...new Set(allSales.map(s => s.genre).filter(Boolean))];
+  genres.forEach(g => excludedGenres.add(g));
+  const p = document.getElementById('genre-selector');
+  if (p && !p.hidden) buildGenrePanel();
+  document.getElementById('genre-btn')?.classList.toggle('active', excludedGenres.size > 0);
   applyFilters();
 }
 
@@ -311,7 +321,8 @@ function buildCategoryPanel(container) {
   }
   container.innerHTML = `
     <div class="cat-actions">
-      <button onclick="clearCatFilter()">Clear all</button>
+      <button onclick="selectAllCats()">Select all</button>
+      <button onclick="clearCatFilter()">Uncheck all</button>
     </div>
     <div class="cat-tree-wrap"><div class="cat-tree">${_renderTree(tree)}</div></div>`;
 }
@@ -365,16 +376,37 @@ function _updateIndeterminate(treeEl) {
   });
 }
 
-function clearCatFilter() {
+function _allCatNodeNames() {
+  const nodes = new Set();
+  for (const s of allSales) {
+    for (const path of (Array.isArray(s.categories) ? s.categories : [])) {
+      for (const n of path) nodes.add(n);
+    }
+  }
+  return nodes;
+}
+
+function selectAllCats() {
   excludedCategories.clear();
+  _rebuildCatPanels();
+  document.getElementById('cats-btn')?.classList.remove('active');
+  renderHeader(); applyFilters();
+}
+
+function clearCatFilter() {
+  _allCatNodeNames().forEach(n => excludedCategories.add(n));
+  _rebuildCatPanels();
+  document.getElementById('cats-btn')?.classList.add('active');
+  renderHeader(); applyFilters();
+}
+
+function _rebuildCatPanels() {
   const desk = document.getElementById('cats-selector');
   if (desk && !desk.hidden) buildCategoryPanel(desk);
   const mob = document.getElementById('sheet-cat-tree');
   if (mob) buildCategoryPanel(mob);
   const fp = document.getElementById('filter-panel');
   if (fp && fp.querySelector('.cat-tree')) buildCategoryPanel(fp);
-  document.getElementById('cats-btn')?.classList.remove('active');
-  renderHeader(); applyFilters();
 }
 
 function toggleCatsPanel() {
