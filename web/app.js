@@ -1237,7 +1237,13 @@ function buildFilterSheet() {
 
     ${genres.length ? `
     <div class="sheet-section">
-      <div class="sheet-label">Genre</div>
+      <div class="sheet-label" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Genre</span>
+        <span style="display:flex;gap:6px">
+          <button onclick="selectAllGenres();buildFilterSheet()" style="font-size:11px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:var(--surface);cursor:pointer">Select all</button>
+          <button onclick="clearGenreFilter();buildFilterSheet()" style="font-size:11px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:var(--surface);cursor:pointer">Uncheck all</button>
+        </span>
+      </div>
       <div class="sheet-tag-list">
         ${genres.map(g => `
           <label class="sheet-check">
