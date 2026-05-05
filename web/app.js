@@ -222,6 +222,7 @@ function toggleGenrePanel() {
   p.hidden = !p.hidden;
   if (!p.hidden) {
     buildGenrePanel();
+    syncFilterPanels();
     const onOut = e => {
       if (p.contains(e.target) || e.target.closest('#genre-btn')) return;
       p.hidden = true;
@@ -407,6 +408,7 @@ function _rebuildCatPanels() {
   if (mob) buildCategoryPanel(mob);
   const fp = document.getElementById('filter-panel');
   if (fp && fp.querySelector('.cat-tree')) buildCategoryPanel(fp);
+  syncFilterPanels();
 }
 
 function toggleCatsPanel() {
@@ -414,6 +416,7 @@ function toggleCatsPanel() {
   p.hidden = !p.hidden;
   if (!p.hidden) {
     buildCategoryPanel(p);
+    syncFilterPanels();
     const onOut = e => {
       if (p.contains(e.target) || e.target.closest('#cats-btn')) return;
       p.hidden = true;
@@ -503,6 +506,37 @@ function applyFilters() {
 
   applySort();
   _updateClearBtn();
+  syncFilterPanels();
+}
+
+function syncFilterPanels() {
+  // Genre panel: check only genres present in currently filtered results
+  const visibleGenres = new Set(filtered.map(s => s.genre).filter(Boolean));
+  const genrePanel = document.getElementById('genre-selector');
+  if (genrePanel && !genrePanel.hidden) {
+    genrePanel.querySelectorAll('.fp-list input[type=checkbox]').forEach(cb => {
+      cb.checked = visibleGenres.has(cb.value) && !excludedGenres.has(cb.value);
+    });
+  }
+
+  // Category panels: check only nodes present in currently filtered results
+  const visibleCatNodes = new Set();
+  for (const s of filtered) {
+    for (const path of (Array.isArray(s.categories) ? s.categories : [])) {
+      for (const n of path) visibleCatNodes.add(n);
+    }
+  }
+  for (const treeEl of [
+    document.querySelector('#cats-selector .cat-tree'),
+    document.querySelector('#sheet-cat-tree .cat-tree'),
+    document.querySelector('#filter-panel .cat-tree'),
+  ].filter(Boolean)) {
+    treeEl.querySelectorAll('input[type=checkbox]').forEach(cb => {
+      cb.checked = visibleCatNodes.has(cb.value) && !excludedCategories.has(cb.value);
+      cb.indeterminate = false;
+    });
+    _updateIndeterminate(treeEl);
+  }
 }
 
 // ─── Sort ─────────────────────────────────────────────────────────────────────
@@ -726,7 +760,7 @@ function openFilter(colKey, anchor) {
   if (col.filter === 'list')   buildListPanel(panel, col);
   else if (col.filter === 'text')  buildTextPanel(panel, col);
   else if (col.filter === 'price') buildPricePanel(panel, col);
-  else if (col.filter === 'tree')  buildCategoryPanel(panel);
+  else if (col.filter === 'tree')  { buildCategoryPanel(panel); syncFilterPanels(); }
   else                             buildRangePanel(panel, col);
   document.body.appendChild(panel);
 
@@ -1247,7 +1281,7 @@ function buildFilterSheet() {
   // Populate category tree inside sheet (requestAnimationFrame ensures DOM is ready)
   requestAnimationFrame(() => {
     const catContainer = document.getElementById('sheet-cat-tree');
-    if (catContainer) buildCategoryPanel(catContainer);
+    if (catContainer) { buildCategoryPanel(catContainer); syncFilterPanels(); }
   });
 }
 
