@@ -52,7 +52,7 @@ let openFilterKey = null;
 let quickType        = '';
 let searchQuery        = '';
 let ownedFilter        = ''; // '' | 'owned' | 'unowned'
-let excludedCategories = new Set();
+let includedCategories = new Set(); // empty = no filter (show all); non-empty = show only matching
 let excludedGenres     = new Set(); // genres unchecked (default all checked = no filter)
 let authorFilter       = '';
 let narratorFilter     = '';
@@ -241,14 +241,14 @@ function clearGenreFilter() {
 function clearAllFilters() {
   quickType = ''; searchQuery = ''; ownedFilter = '';
   authorFilter = ''; narratorFilter = '';
-  excludedGenres.clear(); excludedCategories.clear(); colFilters = {};
+  excludedGenres.clear(); includedCategories.clear(); colFilters = {};
   document.getElementById('title-search').value = '';
   document.getElementById('favs-only').checked = false;
   document.querySelectorAll('#type-pills .pill').forEach(p => p.classList.remove('active'));
   document.querySelector('#type-pills .pill')?.classList.add('active'); // re-activate "All"
   document.querySelectorAll('#owned-pills .pill').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.cat-tree input[type=checkbox]').forEach(i => {
-    i.checked = true; i.indeterminate = false;
+    i.checked = false; i.indeterminate = false;
   });
   document.getElementById('cats-btn')?.classList.remove('active');
   document.getElementById('genre-btn')?.classList.remove('active');
@@ -257,7 +257,7 @@ function clearAllFilters() {
 
 function _updateClearBtn() {
   const active = quickType || searchQuery || ownedFilter || authorFilter || narratorFilter ||
-    excludedGenres.size > 0 || excludedCategories.size > 0 || Object.keys(colFilters).length > 0;
+    excludedGenres.size > 0 || includedCategories.size > 0 || Object.keys(colFilters).length > 0;
   document.getElementById('clear-filters-btn').hidden = !active;
 }
 
@@ -289,11 +289,11 @@ function _buildTree() {
 function _renderTree(node, depth = 0) {
   return Object.entries(node).sort(([a],[b]) => a.localeCompare(b)).map(([name, data]) => {
     const hasChildren = Object.keys(data.children).length > 0;
-    const checked     = !excludedCategories.has(name) ? 'checked' : '';
+    const checked     = includedCategories.has(name) ? 'checked' : '';
     const childHtml   = hasChildren ? `<div class="cat-children">${_renderTree(data.children, depth+1)}</div>` : '';
     return `<div class="cat-node">
       <label class="cat-label">
-        ${hasChildren ? `<span class="cat-toggle" onclick="toggleCatNode(this)">▶</span>` : '<span class="cat-toggle-spacer"></span>'}
+        ${hasChildren ? `<span class="cat-toggle" onclick="event.stopPropagation();toggleCatNode(this)">▶</span>` : '<span class="cat-toggle-spacer"></span>'}
         <input type="checkbox" value="${esc(name)}" ${checked} onchange="toggleCatFilter('${esc(name)}',this.checked,this)">
         <span>${esc(name)}</span>
         <small class="cat-count">${data.count}</small>
@@ -325,16 +325,16 @@ function toggleCatNode(arrow) {
 }
 
 function toggleCatFilter(name, checked, cb) {
-  if (!checked) excludedCategories.add(name);
-  else          excludedCategories.delete(name);
+  if (checked) includedCategories.add(name);
+  else         includedCategories.delete(name);
 
   // Propagate to children
   if (cb) {
     cb.closest('.cat-node')?.querySelectorAll('.cat-children input[type=checkbox]').forEach(child => {
       child.checked = checked;
       child.indeterminate = false;
-      if (!checked) excludedCategories.add(child.value);
-      else          excludedCategories.delete(child.value);
+      if (checked) includedCategories.add(child.value);
+      else         includedCategories.delete(child.value);
     });
   }
 
@@ -344,7 +344,7 @@ function toggleCatFilter(name, checked, cb) {
    document.querySelector('#filter-panel .cat-tree'),
   ].filter(Boolean).forEach(_updateIndeterminate);
 
-  document.getElementById('cats-btn')?.classList.toggle('active', excludedCategories.size > 0);
+  document.getElementById('cats-btn')?.classList.toggle('active', includedCategories.size > 0);
   renderHeader(); applyFilters();
 }
 
@@ -366,12 +366,11 @@ function _updateIndeterminate(treeEl) {
 }
 
 function clearCatFilter() {
-  excludedCategories.clear();
+  includedCategories.clear();
   const desk = document.getElementById('cats-selector');
   if (desk && !desk.hidden) buildCategoryPanel(desk);
   const mob = document.getElementById('sheet-cat-tree');
   if (mob) buildCategoryPanel(mob);
-  // Also rebuild the floating column-header filter panel if open on categories
   const fp = document.getElementById('filter-panel');
   if (fp && fp.querySelector('.cat-tree')) buildCategoryPanel(fp);
   document.getElementById('cats-btn')?.classList.remove('active');
@@ -400,7 +399,7 @@ function isFilterActive(dk) {
   if (f.type === 'list')  return f.excluded.size > 0;
   if (f.type === 'range') return f.min != null || f.max != null;
   if (f.type === 'price') return !f.includeCredit || f.min != null || f.max != null;
-  if (dk === 'categories') return excludedCategories.size > 0;
+  if (dk === 'categories') return includedCategories.size > 0;
   return false;
 }
 
@@ -424,13 +423,11 @@ function applyFilters() {
     // Genre filter (exclude model — checked = visible)
     if (excludedGenres.size > 0 && s.genre && excludedGenres.has(s.genre)) return false;
 
-    // Category tree filter (exclude: item hidden if any of its nodes are excluded)
-    if (excludedCategories.size > 0) {
+    // Category filter (inclusion: show only items with at least one included node)
+    if (includedCategories.size > 0) {
       const paths = Array.isArray(s.categories) ? s.categories : [];
-      if (paths.length > 0) {
-        const excluded = paths.some(path => path.some(node => excludedCategories.has(node)));
-        if (excluded) return false;
-      }
+      const matched = paths.some(path => path.some(node => includedCategories.has(node)));
+      if (!matched) return false;
     }
 
     // Region filter (treat null/missing region as 'us')
@@ -1054,7 +1051,7 @@ function closeFilterSheet() {
 function resetFilters() {
   quickType = '';
   excludedGenres.clear();
-  excludedCategories.clear();
+  includedCategories.clear();
   colFilters = {};
   document.getElementById('favs-only').checked = false;
   buildFilterSheet();
