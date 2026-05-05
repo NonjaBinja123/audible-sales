@@ -57,9 +57,48 @@ let excludedGenres     = new Set(); // genres unchecked (default all checked = n
 let authorFilter       = '';
 let narratorFilter     = '';
 
+// ─── Theme ────────────────────────────────────────────────────────────────────
+(function initTheme() {
+  const stored = localStorage.getItem('audible_theme');
+  const mq     = window.matchMedia('(prefers-color-scheme: dark)');
+  const isDark  = stored === 'dark' || (stored !== 'light' && mq.matches);
+  document.documentElement.classList.toggle('dark', isDark);
+  mq.addEventListener('change', e => {
+    if (!localStorage.getItem('audible_theme'))
+      document.documentElement.classList.toggle('dark', e.matches);
+    _syncThemeBtn();
+  });
+})();
+
+function _syncThemeBtn() {
+  const stored  = localStorage.getItem('audible_theme');
+  const isDark  = document.documentElement.classList.contains('dark');
+  const label   = stored ? (isDark ? 'Dark' : 'Light') : (isDark ? 'Dark (auto)' : 'Light (auto)');
+  document.getElementById('theme-toggle')?.textContent     && (document.getElementById('theme-toggle').textContent = label);
+  document.getElementById('theme-toggle-mob')?.textContent && (document.getElementById('theme-toggle-mob').textContent = label);
+}
+
+function cycleTheme() {
+  const stored = localStorage.getItem('audible_theme');
+  const isDark  = document.documentElement.classList.contains('dark');
+  let next;
+  if (!stored)           next = 'dark';
+  else if (stored === 'dark')  next = 'light';
+  else                   next = null;
+
+  if (next) localStorage.setItem('audible_theme', next);
+  else      localStorage.removeItem('audible_theme');
+
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  document.documentElement.classList.toggle('dark',
+    next === 'dark' || (!next && mq.matches));
+  _syncThemeBtn();
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
   showTosBanner();
+  _syncThemeBtn();
   document.getElementById('region-select').value = regionFilter;
   buildColSelector();
 
@@ -760,9 +799,10 @@ function openFilter(colKey, anchor) {
   if (col.filter === 'list')   buildListPanel(panel, col);
   else if (col.filter === 'text')  buildTextPanel(panel, col);
   else if (col.filter === 'price') buildPricePanel(panel, col);
-  else if (col.filter === 'tree')  { buildCategoryPanel(panel); syncFilterPanels(); }
+  else if (col.filter === 'tree')  buildCategoryPanel(panel);
   else                             buildRangePanel(panel, col);
   document.body.appendChild(panel);
+  if (col.filter === 'tree') syncFilterPanels();
 
   const r = anchor.getBoundingClientRect();
   let left = r.left + window.scrollX;

@@ -608,3 +608,60 @@ td a:hover { color:var(--orange); text-decoration:underline; }
   #tos-banner { position:fixed; bottom:0; top:auto; z-index:300; }
   #tos-dismiss { margin-left:0; }
 }
+
+/* ─────────────────────────────────────────────────────
+   Dark mode
+───────────────────────────────────────────────────── */
+html.dark {
+  --bg:        #111218;
+  --surface:   #1a1b23;
+  --border:    #2d2f3e;
+  --text:      #e4e4f0;
+  --muted:     #8888a0;
+  --row-alt:   #161720;
+  --row-hover: #252738;
+  --owned-bg:  #0d2018;
+}
+
+/* Hardcoded light colours that need dark overrides */
+html.dark #tos-banner { background:#2a2000; border-color:#665200; }
+html.dark #tos-dismiss { background:#ffc107; color:#000; }
+
+html.dark th.filtered,
+html.dark #clear-filters-btn { background:rgba(228,121,17,.12); }
+
+html.dark #genre-btn.active,
+html.dark #cats-btn.active  { background:rgba(228,121,17,.12); }
+
+html.dark td,
+html.dark th { border-right-color:rgba(255,255,255,.05); }
+html.dark thead tr { border-bottom-color:var(--border); }
+
+html.dark tbody tr.owned:nth-child(even) { background:#0a1f12; }
+html.dark tbody tr.owned:hover           { background:#0f2a1a; }
+
+html.dark .col-panel,
+html.dark .filter-panel {
+  box-shadow:0 6px 24px rgba(0,0,0,.45);
+}
+
+html.dark .fp-search { background:var(--bg); color:var(--text); }
+html.dark .fp-range input,
+html.dark .sheet-text-filter,
+html.dark .sheet-range-row input,
+html.dark .sheet-select { background:var(--bg); color:var(--text); }
+
+/* Theme toggle button */
+#theme-toggle {
+  margin-left:auto;
+  padding:4px 12px;
+  background:rgba(255,255,255,.15);
+  border:1px solid rgba(255,255,255,.3);
+  border-radius:4px;
+  color:#fff;
+  font-size:12px;
+  font-weight:600;
+  cursor:pointer;
+  white-space:nowrap;
+}
+#theme-toggle:hover { background:rgba(255,255,255,.25); }

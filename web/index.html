@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Audible Sales</title>
   <link rel="stylesheet" href="style.css">
+  <script>
+    (function(){var s=localStorage.getItem('audible_theme'),m=window.matchMedia('(prefers-color-scheme: dark)');
+    if(s==='dark'||(s!=='light'&&m.matches))document.documentElement.classList.add('dark');})();
+  </script>
 </head>
 <body>
 
@@ -21,6 +25,7 @@
   <header id="desktop-header">
     <h1>Audible Sales</h1>
     <span id="last-updated"></span>
+    <button id="theme-toggle" onclick="cycleTheme()"></button>
   </header>
 
   <div id="sticky-wrap">
@@ -85,6 +90,7 @@
     <div id="mobile-controls">
       <button id="filter-sheet-btn" onclick="openFilterSheet()">⚙ Filters</button>
       <span id="mobile-count"></span>
+      <button id="theme-toggle-mob" onclick="cycleTheme()" style="padding:4px 10px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:4px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;"></button>
     </div>
   </div>
 
