@@ -358,7 +358,7 @@ def scrape_promos(base: str, ovr: str, auth_file: pathlib.Path, region: str) -> 
     seen: set[str] = set()
 
     for path, sale_type in promo_paths.items():
-        print(f"  Promo: {path}  →  type={sale_type!r}")
+        print(f"  Promo: {path}  ->  type={sale_type!r}")
         for item in _scrape_promo_path(session, path, sale_type, base, ovr, region):
             if item["asin"] not in seen:
                 all_items.append(item)
