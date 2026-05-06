@@ -1,4 +1,5 @@
 scraper/.env
+scraper/scraper.disabled
 scraper/discover*.py
 scraper/discover_out/
 scraper/sales_preview.csv

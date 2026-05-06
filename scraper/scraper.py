@@ -7,7 +7,12 @@ import audible
 
 load_dotenv()
 
-ROOT      = pathlib.Path(__file__).parent.parent
+SCRAPER_DIR = pathlib.Path(__file__).parent
+ROOT        = pathlib.Path(__file__).parent.parent
+
+if (SCRAPER_DIR / "scraper.disabled").exists():
+    print(f"Scraper disabled (scraper.disabled flag file present). Remove it to re-enable.")
+    sys.exit(0)
 DATA_FILE = ROOT / "data" / "sales.json"
 CSV_FILE  = ROOT / "data" / "sales.csv"
 
@@ -19,8 +24,6 @@ CSV_FIELDS = [
 
 # Regions to scrape. Add/remove entries here to enable/disable regions.
 # auth_file must exist (run auth_setup.py with AUDIBLE_LOCALE=<code> to create it).
-SCRAPER_DIR = pathlib.Path(__file__).parent
-
 REGION_CONFIGS = {
     "us": {
         "base":        "https://www.audible.com",
