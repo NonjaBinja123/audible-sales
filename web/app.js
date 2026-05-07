@@ -946,6 +946,13 @@ function buildListPanel(panel, col) {
     const v = s[dk]; return v == null ? '(blank)' : String(v);
   }))].sort((a, b) => a === '(blank)' ? 1 : b === '(blank)' ? -1 : a.localeCompare(b));
 
+  const seriesExtra = dk === 'series_name' ? `
+    <label class="fp-item" style="border-bottom:1px solid var(--border);font-weight:600">
+      <input type="checkbox" ${seriesFilter === 'first' ? 'checked' : ''}
+             onchange="seriesFilter=this.checked?'first':'';applyFilters()">
+      First in series only
+    </label>` : '';
+
   panel.innerHTML = `
     <div class="fp-head">
       <strong>${col.label}</strong>
@@ -954,6 +961,7 @@ function buildListPanel(panel, col) {
         <button onclick="fpClearList('${dk}')">Clear</button>
       </div>
     </div>
+    ${seriesExtra}
     <input class="fp-search" type="text" placeholder="Search…" oninput="fpSearch(this)">
     <div class="fp-list">
       ${vals.map(v => {
