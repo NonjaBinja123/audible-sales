@@ -83,7 +83,9 @@ let openFilterKey = null;
 let quickType        = '';
 let searchQuery        = '';
 let ownedFilter        = ''; // '' | 'owned' | 'unowned'
-let excludedCategories = new Set(); // empty = show all; non-empty = exclude matching items
+let selectedPaths = new Set(); // path-key strings; full set = no filter; empty = show nothing
+let _catTree     = null;      // cached category tree
+let _allPathKeys = null;      // cached Set of all path key strings
 let authorFilter       = '';
 let narratorFilter     = '';
 
@@ -163,6 +165,10 @@ async function init() {
     const ts = data.last_updated ? 'Updated: ' + new Date(data.last_updated + 'Z').toLocaleString() : '';
     document.getElementById('last-updated').textContent  = ts;
     document.getElementById('mobile-updated').textContent = ts;
+
+    _catTree     = _buildTree();
+    _allPathKeys = new Set(_allPathKeysUnder(_catTree, []));
+    selectedPaths = new Set(_allPathKeys); // all selected = no filter
 
     buildTypePills();
     restoreLibation();
@@ -277,22 +283,21 @@ function setOwnedFilter(val, btn) {
 function clearAllFilters() {
   quickType = ''; searchQuery = ''; ownedFilter = '';
   authorFilter = ''; narratorFilter = '';
-  excludedCategories.clear(); colFilters = {};
+  if (_allPathKeys) selectedPaths = new Set(_allPathKeys);
+  colFilters = {};
   document.getElementById('title-search').value = '';
   document.getElementById('favs-only').checked = false;
   document.querySelectorAll('#type-pills .pill').forEach(p => p.classList.remove('active'));
   document.querySelector('#type-pills .pill')?.classList.add('active');
   document.querySelectorAll('#owned-pills .pill').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.cat-tree input[type=checkbox]').forEach(i => {
-    i.checked = true; i.indeterminate = false;
-  });
   document.getElementById('cats-btn')?.classList.remove('active');
   renderHeader(); applyFilters(); _updateClearBtn();
 }
 
 function _updateClearBtn() {
+  const catActive = _allPathKeys ? selectedPaths.size < _allPathKeys.size : false;
   const active = quickType || searchQuery || ownedFilter || authorFilter || narratorFilter ||
-    excludedCategories.size > 0 || Object.keys(colFilters).length > 0;
+    catActive || Object.keys(colFilters).length > 0;
   document.getElementById('clear-filters-btn').hidden = !active;
 }
 
@@ -314,15 +319,44 @@ function _buildTree() {
   return tree;
 }
 
-function _renderTree(node, depth = 0) {
+// ─── Path-key helpers ─────────────────────────────────────────────────────────
+// Each tree position is identified by its full path joined with '|'
+// e.g. "Science Fiction & Fantasy|Science Fiction|Action and Adventure"
+// This prevents cross-branch sharing of same-named nodes.
+
+function _allPathKeysUnder(node, prefix) {
+  const keys = [];
+  for (const [name, data] of Object.entries(node)) {
+    const path = [...prefix, name];
+    keys.push(path.join('|'));
+    keys.push(..._allPathKeysUnder(data.children, path));
+  }
+  return keys;
+}
+
+function _getNodeAt(tree, parts) {
+  let node = { children: tree };
+  for (const part of parts) {
+    if (!node.children[part]) return null;
+    node = node.children[part];
+  }
+  return node;
+}
+
+function _renderTree(node, depth = 0, parentPath = []) {
   return Object.entries(node).sort(([a],[b]) => a.localeCompare(b)).map(([name, data]) => {
     const hasChildren = Object.keys(data.children).length > 0;
-    const checked     = !excludedCategories.has(name) ? 'checked' : '';
-    const childHtml   = hasChildren ? `<div class="cat-children">${_renderTree(data.children, depth+1)}</div>` : '';
+    const currentPath = [...parentPath, name];
+    const pathKey     = currentPath.join('|');
+    const checked     = selectedPaths.has(pathKey) ? 'checked' : '';
+    const childHtml   = hasChildren
+      ? `<div class="cat-children">${_renderTree(data.children, depth + 1, currentPath)}</div>`
+      : '';
     return `<div class="cat-node">
       <label class="cat-label">
         ${hasChildren ? `<button type="button" class="cat-toggle" onclick="toggleCatNode(this)">▶</button>` : '<span class="cat-toggle-spacer"></span>'}
-        <input type="checkbox" value="${esc(name)}" ${checked} onchange="toggleCatFilter('${esc(name)}',this.checked,this)">
+        <input type="checkbox" value="${esc(pathKey)}" ${checked}
+               onchange="toggleCatFilter(this.value, this.checked)">
         <span>${esc(name)}</span>
         <small class="cat-count">${data.count}</small>
       </label>
@@ -332,8 +366,8 @@ function _renderTree(node, depth = 0) {
 }
 
 function buildCategoryPanel(container) {
-  const tree = _buildTree();
-  if (!Object.keys(tree).length) {
+  if (!_catTree) { _catTree = _buildTree(); _allPathKeys = new Set(_allPathKeysUnder(_catTree, [])); }
+  if (!Object.keys(_catTree).length) {
     container.innerHTML = '<p class="cs-empty">No categories yet — run the scraper to populate.</p>';
     return;
   }
@@ -342,7 +376,7 @@ function buildCategoryPanel(container) {
       <button onclick="selectAllCats()">Select all</button>
       <button onclick="clearCatFilter()">Uncheck all</button>
     </div>
-    <div class="cat-tree-wrap"><div class="cat-tree">${_renderTree(tree)}</div></div>`;
+    <div class="cat-tree-wrap"><div class="cat-tree">${_renderTree(_catTree)}</div></div>`;
 }
 
 function toggleCatNode(arrow) {
@@ -353,81 +387,37 @@ function toggleCatNode(arrow) {
   arrow.textContent = open ? '▶' : '▼';
 }
 
-function toggleCatFilter(name, checked) {
-  if (!checked) {
-    // Uncheck: exclude only this node — path AND logic blocks the path at this node
-    excludedCategories.add(name);
+function toggleCatFilter(pathKey, checked) {
+  const parts = pathKey.split('|');
+  const node  = _getNodeAt(_catTree, parts);
+  const descendantKeys = node ? _allPathKeysUnder(node.children, parts) : [];
+  const allKeys = [pathKey, ...descendantKeys];
+
+  // Count how many of these keys are currently selected
+  const selectedCount = allKeys.filter(k => selectedPaths.has(k)).length;
+
+  if (checked && selectedCount === 0) {
+    // Was unchecked → check: add this node + all descendants
+    allKeys.forEach(k => selectedPaths.add(k));
   } else {
-    // Check: remove this node, all its descendants, and all its ancestors so the
-    // full path from root to leaf is unblocked in both directions
-    excludedCategories.delete(name);
-    _descendantsOf(name).forEach(n => excludedCategories.delete(n));
-    _ancestorsOf(name).forEach(n  => excludedCategories.delete(n));
+    // Was checked or indeterminate → uncheck: remove this node + all descendants
+    allKeys.forEach(k => selectedPaths.delete(k));
   }
 
-  document.getElementById('cats-btn')?.classList.toggle('active', excludedCategories.size > 0);
+  const isActive = _allPathKeys && selectedPaths.size < _allPathKeys.size;
+  document.getElementById('cats-btn')?.classList.toggle('active', isActive);
   renderHeader(); applyFilters();
 }
 
-function _ancestorsOf(name) {
-  const result = new Set();
-  for (const s of allSales)
-    for (const path of (Array.isArray(s.categories) ? s.categories : [])) {
-      const idx = path.indexOf(name);
-      if (idx > 0) for (let i = 0; i < idx; i++) result.add(path[i]);
-    }
-  return result;
-}
-
-function _descendantsOf(name) {
-  const result = new Set();
-  for (const s of allSales)
-    for (const path of (Array.isArray(s.categories) ? s.categories : [])) {
-      const idx = path.indexOf(name);
-      if (idx >= 0) for (let i = idx + 1; i < path.length; i++) result.add(path[i]);
-    }
-  return result;
-}
-
-function _updateIndeterminate(treeEl) {
-  [...treeEl.querySelectorAll('.cat-node')].reverse().forEach(node => {
-    const parentCb = node.querySelector(':scope > .cat-label > input[type=checkbox]');
-    const childCbs = [...node.querySelectorAll(':scope > .cat-children .cat-node > .cat-label > input[type=checkbox]')];
-    if (!parentCb || !childCbs.length) return;
-    // Explicitly excluded parent stays unchecked — its block is absolute
-    if (excludedCategories.has(parentCb.value)) {
-      parentCb.checked = false; parentCb.indeterminate = false;
-      return;
-    }
-    // Non-excluded parent: fully checked only when all children are fully checked
-    const allFullyChecked = childCbs.every(c => c.checked && !c.indeterminate);
-    if (allFullyChecked) {
-      parentCb.checked = true;  parentCb.indeterminate = false;
-    } else {
-      parentCb.checked = false; parentCb.indeterminate = true;
-    }
-  });
-}
-
-function _allCatNodeNames() {
-  const nodes = new Set();
-  for (const s of allSales) {
-    for (const path of (Array.isArray(s.categories) ? s.categories : [])) {
-      for (const n of path) nodes.add(n);
-    }
-  }
-  return nodes;
-}
-
 function selectAllCats() {
-  excludedCategories.clear();
+  if (_allPathKeys) selectedPaths = new Set(_allPathKeys);
   _rebuildCatPanels();
   document.getElementById('cats-btn')?.classList.remove('active');
   renderHeader(); applyFilters();
 }
 
 function clearCatFilter() {
-  _allCatNodeNames().forEach(n => excludedCategories.add(n));
+  selectedPaths.clear();
   _rebuildCatPanels();
   document.getElementById('cats-btn')?.classList.add('active');
   renderHeader(); applyFilters();
@@ -466,7 +456,7 @@ function isFilterActive(dk) {
   if (f.type === 'list')  return f.excluded.size > 0;
   if (f.type === 'range') return f.min != null || f.max != null;
   if (f.type === 'price') return !f.includeCredit || f.min != null || f.max != null;
-  if (dk === 'categories') return excludedCategories.size > 0;
+  if (dk === 'categories') return _allPathKeys ? selectedPaths.size < _allPathKeys.size : false;
   return false;
 }
 
@@ -487,16 +477,12 @@ function applyFilters() {
     // Quick type pill
     if (quickType && s.type !== quickType) return false;
 
-    // Category filter — path AND logic: show if any complete path has no excluded nodes.
-    // Checking a node also clears its ancestors/descendants so the path opens fully.
-    // Items with no categories are hidden when filter is active.
-    if (excludedCategories.size > 0) {
+    // Category filter — path-key inclusion: each branch is tracked independently.
+    // Show if any of the book's full path strings is in selectedPaths.
+    if (_allPathKeys && selectedPaths.size < _allPathKeys.size) {
       const paths = Array.isArray(s.categories) ? s.categories : [];
-      if (paths.length === 0) return false;
-      const hasCleanPath = paths.some(path =>
-        path.length > 0 && path.every(node => !excludedCategories.has(node))
-      );
-      if (!hasCleanPath) return false;
+      if (paths.length === 0) return false; // uncategorized hidden when filter active
+      if (!paths.some(path => path.length > 0 && selectedPaths.has(path.join('|')))) return false;
     }
 
     // Region filter (treat null/missing region as 'us')
@@ -539,16 +525,23 @@ function applyFilters() {
 }
 
 function syncFilterPanels() {
+  if (!_catTree) return;
   for (const treeEl of [
     document.querySelector('#cats-selector .cat-tree'),
     document.querySelector('#sheet-cat-tree .cat-tree'),
     document.querySelector('#filter-panel .cat-tree'),
   ].filter(Boolean)) {
     treeEl.querySelectorAll('input[type=checkbox]').forEach(cb => {
-      cb.checked = !excludedCategories.has(cb.value);
-      cb.indeterminate = false;
+      const pathKey = cb.value;
+      const parts   = pathKey.split('|');
+      const node    = _getNodeAt(_catTree, parts);
+      const descKeys = node ? _allPathKeysUnder(node.children, parts) : [];
+      const allKeys  = [pathKey, ...descKeys];
+      const n = allKeys.filter(k => selectedPaths.has(k)).length;
+      if (n === allKeys.length)     { cb.checked = true;  cb.indeterminate = false; }
+      else if (n === 0)             { cb.checked = false; cb.indeterminate = false; }
+      else                          { cb.checked = false; cb.indeterminate = true;  }
     });
-    _updateIndeterminate(treeEl);
   }
 }
 
@@ -1173,7 +1166,7 @@ function closeFilterSheet() {
 
 function resetFilters() {
   quickType = '';
-  excludedCategories.clear();
+  if (_allPathKeys) selectedPaths = new Set(_allPathKeys);
   colFilters = {};
   document.getElementById('favs-only').checked = false;
   buildFilterSheet();
