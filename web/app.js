@@ -1545,6 +1545,7 @@ function setMobileSort(level, dk) {
   if (!dk) { sortKeys = sortKeys.slice(0, level); }
   else { sortKeys = sortKeys.slice(0, level); sortKeys[level] = { dk, asc: !['rating','bayesian','weighted','rating_count'].includes(dk) }; }
   applySort();
+  buildFilterSheet();
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
