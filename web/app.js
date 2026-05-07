@@ -165,7 +165,6 @@ async function init() {
     document.getElementById('mobile-updated').textContent = ts;
 
     buildTypePills();
-    buildGenrePanel();
     restoreLibation();
     updateTableHeight();
     renderHeader();
