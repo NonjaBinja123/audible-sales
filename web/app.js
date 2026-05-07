@@ -49,10 +49,21 @@ const COLUMNS = [
   { key:'asin',          label:'ASIN',        always:false, def:false, sort:false, filter:false,   dk:'asin' },
 ];
 
+function _secondaryGenres(sale) {
+  const primary = sale.genre;
+  const seen = new Set(primary ? [primary] : []);
+  const out = [];
+  for (const path of (Array.isArray(sale.categories) ? sale.categories : [])) {
+    const g = path[0];
+    if (g && !seen.has(g)) { seen.add(g); out.push(g); }
+  }
+  return out;
+}
+
 // ─── Card field definitions (mobile) ─────────────────────────────────────────
 const CARD_FIELD_DEFS = [
   { key:'narrator',     label:'Narrator',    fmt: s => s.narrator || null },
-  { key:'genre',        label:'Genre',       fmt: s => s.genre || null },
+  { key:'genre',        label:'Genre',       fmt: s => { const sec = _secondaryGenres(s); return s.genre ? (sec.length ? s.genre + ' · ' + sec.join(', ') : s.genre) : null; } },
   { key:'length_hours', label:'Length',      fmt: s => s.length_hours != null ? s.length_hours.toFixed(1) + 'h' : null },
   { key:'rating',       label:'Rating',      fmt: s => s.rating != null ? '★ ' + s.rating.toFixed(1) : null },
   { key:'rating_count', label:'# Ratings',   fmt: s => s.rating_count != null ? s.rating_count.toLocaleString() + ' ratings' : null },
@@ -739,6 +750,19 @@ function buildCell(sale, col) {
       td.textContent = ownedAsins.has(sale.asin) ? '✓' : '';
       td.style.color = 'var(--green)';
       td.style.fontWeight = '700';
+      break;
+    }
+    case 'genre': {
+      if (sale.genre) {
+        td.textContent = sale.genre;
+        const secondary = _secondaryGenres(sale);
+        if (secondary.length) {
+          const sm = document.createElement('span');
+          sm.className = 'secondary-genre';
+          sm.textContent = ' · ' + secondary.join(', ');
+          td.appendChild(sm);
+        }
+      }
       break;
     }
     default:
