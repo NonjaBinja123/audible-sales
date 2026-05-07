@@ -45,6 +45,7 @@ const COLUMNS = [
   { key:'weighted',      label:'Weighted',    always:false, def:false, sort:true,  filter:'range', dk:'weighted' },
   { key:'price',         label:'Sale Price',  always:false, def:true,  sort:true,  filter:'price', dk:'price' },
   { key:'regular_price', label:'List Price',  always:false, def:true,  sort:true,  filter:'range', dk:'regular_price' },
+  { key:'series',        label:'Series',      always:false, def:false, sort:true,  filter:'list',  dk:'series_name' },
   { key:'owned',         label:'Owned',       always:false, def:false, sort:true,  filter:false,   dk:'owned' },
   { key:'asin',          label:'ASIN',        always:false, def:false, sort:false, filter:false,   dk:'asin' },
 ];
@@ -69,6 +70,7 @@ const CARD_FIELD_DEFS = [
   { key:'rating_count', label:'# Ratings',   fmt: s => s.rating_count != null ? s.rating_count.toLocaleString() + ' ratings' : null },
   { key:'bayesian',     label:'Bayesian',    fmt: s => s.bayesian != null ? 'Bayes ' + s.bayesian.toFixed(2) : null },
   { key:'weighted',     label:'Weighted',    fmt: s => s.weighted != null ? 'Score ' + s.weighted.toFixed(2) : null },
+  { key:'series_name',  label:'Series',      fmt: s => s.series_name ? (s.series_name + (s.series_sequence ? ' #' + s.series_sequence : '')) : null },
   { key:'price',        label:'Price',       fmt: s => s.type === '2for1' ? '1 credit' : (s.price != null ? '$' + s.price.toFixed(2) : null) },
 ];
 const CARD_FIELD_MAX = 5;
@@ -98,6 +100,8 @@ let selectedPaths = new Set(); // path-key strings; full set = no filter; empty 
 let _catTree     = null;      // cached category tree
 let _allPathKeys = null;      // cached Set of all path key strings
 let authorFilter       = '';
+let seriesFilter       = ''; // '' | 'first' — quick filter for first-in-series
+let seriesNameFilter   = ''; // text search on series name
 let narratorFilter     = '';
 
 // ─── Help modal ───────────────────────────────────────────────────────────────
@@ -322,6 +326,25 @@ function buildTypePills() {
     `<button class="pill" onclick="setTypeFilter('${esc(t)}', this)">${TYPE_LABELS[t] || t}</button>`
   ).join('');
   container.innerHTML = allBtn + typeBtns;
+
+  // Series quick-filter pill — only show if any series data exists
+  const hasSeries = allSales.some(s => s.series_name);
+  const sp = document.getElementById('series-pills');
+  if (sp) {
+    if (hasSeries) {
+      sp.innerHTML = `<button class="pill${seriesFilter === 'first' ? ' active' : ''}"
+        onclick="setSeriesFilter('first', this)">First in series</button>`;
+    } else {
+      sp.innerHTML = '';
+    }
+  }
+}
+
+function setSeriesFilter(val, btn) {
+  seriesFilter = seriesFilter === val ? '' : val;
+  document.querySelectorAll('#series-pills .pill').forEach(p => p.classList.remove('active'));
+  if (seriesFilter) btn.classList.add('active');
+  applyFilters();
 }
 
 function setTypeFilter(type, btn) {
@@ -357,6 +380,8 @@ function setOwnedFilter(val, btn) {
 function clearAllFilters() {
   quickType = ''; searchQuery = ''; ownedFilter = '';
   authorFilter = ''; narratorFilter = '';
+  seriesFilter = ''; seriesNameFilter = '';
+  document.querySelectorAll('#series-pills .pill').forEach(p => p.classList.remove('active'));
   if (_allPathKeys) selectedPaths = new Set(_allPathKeys);
   colFilters = {};
   document.getElementById('title-search').value = '';
@@ -371,7 +396,7 @@ function clearAllFilters() {
 function _updateClearBtn() {
   const catActive = _allPathKeys ? selectedPaths.size < _allPathKeys.size : false;
   const active = quickType || searchQuery || ownedFilter || authorFilter || narratorFilter ||
-    catActive || Object.keys(colFilters).length > 0;
+    seriesFilter || seriesNameFilter || catActive || Object.keys(colFilters).length > 0;
   document.getElementById('clear-filters-btn').hidden = !active;
 }
 
@@ -550,6 +575,10 @@ function applyFilters() {
 
     // Quick type pill
     if (quickType && s.type !== quickType) return false;
+
+    // Series filters
+    if (seriesFilter === 'first' && !s.is_series_start) return false;
+    if (seriesNameFilter && !(s.series_name || '').toLowerCase().includes(seriesNameFilter.toLowerCase())) return false;
 
     // Category filter — path-key inclusion: each branch is tracked independently.
     // Show if any of the book's full path strings is in selectedPaths.
@@ -813,6 +842,20 @@ function buildCell(sale, col) {
       td.textContent = ownedAsins.has(sale.asin) ? '✓' : '';
       td.style.color = 'var(--green)';
       td.style.fontWeight = '700';
+      break;
+    }
+    case 'series': {
+      if (sale.series_name) {
+        const seq = sale.series_sequence ? ` #${sale.series_sequence}` : '';
+        td.textContent = sale.series_name + seq;
+        if (sale.is_series_start) {
+          const b = document.createElement('span');
+          b.className = 'badge badge-series-start';
+          b.textContent = '#1';
+          td.textContent = sale.series_name;
+          td.appendChild(b);
+        }
+      }
       break;
     }
     case 'genre': {
