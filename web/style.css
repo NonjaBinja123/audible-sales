@@ -646,6 +646,18 @@ td a:hover { color:var(--orange); text-decoration:underline; }
 /* ─────────────────────────────────────────────────────
    Dark mode
 ───────────────────────────────────────────────────── */
+
+/* Browsers don't inherit color on <button> — force it in dark mode */
+html.dark button { color: var(--text); }
+/* Restore intentional overrides */
+html.dark button.pill.active,
+html.dark #sheet-apply,
+html.dark #filter-sheet-btn,
+html.dark #theme-toggle,
+html.dark #theme-toggle-mob { color: #fff; }
+html.dark button.pill:not(.active) { color: var(--text); }
+html.dark #sheet-reset { color: var(--orange); }
+
 html.dark {
   --bg:        #111218;
   --surface:   #1a1b23;
