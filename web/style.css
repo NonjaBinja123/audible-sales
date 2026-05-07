@@ -715,6 +715,20 @@ html.dark .sheet-range-row input,
 html.dark .sheet-select { background:var(--bg); color:var(--text); }
 
 /* Help button */
+#refresh-btn {
+  margin-left:6px;
+  width:26px; height:26px;
+  border-radius:50%;
+  border:1px solid rgba(255,255,255,.4);
+  background:rgba(255,255,255,.15);
+  color:#fff;
+  font-size:16px;
+  cursor:pointer;
+  line-height:1;
+  flex-shrink:0;
+}
+#refresh-btn:hover { background:rgba(255,255,255,.3); }
+
 #help-btn {
   margin-left:6px;
   width:26px; height:26px;

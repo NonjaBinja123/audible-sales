@@ -203,6 +203,7 @@ async function refreshData() {
       weighted: computeWeighted(s.rating, s.rating_count),
     }));
     const ts = data.last_updated ? 'Updated: ' + new Date(data.last_updated + 'Z').toLocaleString() : '';
+    document.getElementById('last-updated').textContent  = ts;
     document.getElementById('mobile-updated').textContent = ts;
     _catTree     = _buildTree();
     _allPathKeys = new Set(_allPathKeysUnder(_catTree, []));
