@@ -390,15 +390,18 @@ function _descendantsOf(name) {
 }
 
 function _updateIndeterminate(treeEl) {
-  // Bottom-up: process leaf parents first
   [...treeEl.querySelectorAll('.cat-node')].reverse().forEach(node => {
-    const parentCb  = node.querySelector(':scope > .cat-label > input[type=checkbox]');
-    const childCbs  = [...node.querySelectorAll(':scope > .cat-children .cat-node > .cat-label > input[type=checkbox]')];
+    const parentCb = node.querySelector(':scope > .cat-label > input[type=checkbox]');
+    const childCbs = [...node.querySelectorAll(':scope > .cat-children .cat-node > .cat-label > input[type=checkbox]')];
     if (!parentCb || !childCbs.length) return;
-    const nChecked = childCbs.filter(c => c.checked || c.indeterminate).length;
-    if (nChecked === 0) {
+    // Explicitly excluded parent stays unchecked — its block is absolute
+    if (excludedCategories.has(parentCb.value)) {
       parentCb.checked = false; parentCb.indeterminate = false;
-    } else if (nChecked === childCbs.length && childCbs.every(c => c.checked && !c.indeterminate)) {
+      return;
+    }
+    // Non-excluded parent: fully checked only when all children are fully checked
+    const allFullyChecked = childCbs.every(c => c.checked && !c.indeterminate);
+    if (allFullyChecked) {
       parentCb.checked = true;  parentCb.indeterminate = false;
     } else {
       parentCb.checked = false; parentCb.indeterminate = true;
@@ -545,6 +548,7 @@ function syncFilterPanels() {
       cb.checked = !excludedCategories.has(cb.value);
       cb.indeterminate = false;
     });
+    _updateIndeterminate(treeEl);
   }
 }
 
