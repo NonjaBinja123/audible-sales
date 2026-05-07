@@ -84,7 +84,6 @@ let quickType        = '';
 let searchQuery        = '';
 let ownedFilter        = ''; // '' | 'owned' | 'unowned'
 let excludedCategories = new Set(); // empty = show all; non-empty = exclude matching items
-let excludedGenres     = new Set(); // genres unchecked (default all checked = no filter)
 let authorFilter       = '';
 let narratorFilter     = '';
 
@@ -276,94 +275,26 @@ function setOwnedFilter(val, btn) {
   applyFilters();
 }
 
-function buildGenrePanel() {
-  const genres  = [...new Set(allSales.map(s => s.genre).filter(Boolean))].sort();
-  const panel   = document.getElementById('genre-selector');
-  const divider = document.querySelector('.pill-divider');
-  if (!genres.length) {
-    if (divider) divider.style.display = 'none';
-    document.getElementById('genre-picker').style.display = 'none';
-    return;
-  }
-  if (divider) divider.style.display = '';
-  panel.innerHTML = `
-    <div class="fp-head">
-      <strong>Genre</strong>
-      <div class="fp-actions">
-        <button onclick="selectAllGenres()">Select all</button>
-        <button onclick="clearGenreFilter()">Uncheck all</button>
-      </div>
-    </div>
-    <div class="fp-list">
-      ${genres.map(g => `
-        <label class="fp-item">
-          <input type="checkbox" value="${esc(g)}" ${!excludedGenres.has(g)?'checked':''}
-                 onchange="toggleGenrePill('${esc(g)}',this.checked)">
-          ${esc(g)}
-        </label>`).join('')}
-    </div>`;
-}
-
-function toggleGenrePanel() {
-  const p = document.getElementById('genre-selector');
-  p.hidden = !p.hidden;
-  if (!p.hidden) {
-    buildGenrePanel();
-    syncFilterPanels();
-    const onOut = e => {
-      if (p.contains(e.target) || e.target.closest('#genre-btn')) return;
-      p.hidden = true;
-      document.removeEventListener('mousedown', onOut);
-    };
-    setTimeout(() => document.addEventListener('mousedown', onOut), 0);
-  }
-}
-
-function selectAllGenres() {
-  excludedGenres.clear();
-  const p = document.getElementById('genre-selector');
-  if (p && !p.hidden) buildGenrePanel();
-  document.getElementById('genre-btn')?.classList.remove('active');
-  applyFilters();
-}
-
-function clearGenreFilter() {
-  const genres = [...new Set(allSales.map(s => s.genre).filter(Boolean))];
-  genres.forEach(g => excludedGenres.add(g));
-  const p = document.getElementById('genre-selector');
-  if (p && !p.hidden) buildGenrePanel();
-  document.getElementById('genre-btn')?.classList.toggle('active', excludedGenres.size > 0);
-  applyFilters();
-}
-
 function clearAllFilters() {
   quickType = ''; searchQuery = ''; ownedFilter = '';
   authorFilter = ''; narratorFilter = '';
-  excludedGenres.clear(); excludedCategories.clear(); colFilters = {};
+  excludedCategories.clear(); colFilters = {};
   document.getElementById('title-search').value = '';
   document.getElementById('favs-only').checked = false;
   document.querySelectorAll('#type-pills .pill').forEach(p => p.classList.remove('active'));
-  document.querySelector('#type-pills .pill')?.classList.add('active'); // re-activate "All"
+  document.querySelector('#type-pills .pill')?.classList.add('active');
   document.querySelectorAll('#owned-pills .pill').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.cat-tree input[type=checkbox]').forEach(i => {
     i.checked = true; i.indeterminate = false;
   });
   document.getElementById('cats-btn')?.classList.remove('active');
-  document.getElementById('genre-btn')?.classList.remove('active');
   renderHeader(); applyFilters(); _updateClearBtn();
 }
 
 function _updateClearBtn() {
   const active = quickType || searchQuery || ownedFilter || authorFilter || narratorFilter ||
-    excludedGenres.size > 0 || excludedCategories.size > 0 || Object.keys(colFilters).length > 0;
+    excludedCategories.size > 0 || Object.keys(colFilters).length > 0;
   document.getElementById('clear-filters-btn').hidden = !active;
-}
-
-function toggleGenrePill(genre, checked) {
-  if (!checked) excludedGenres.add(genre);
-  else          excludedGenres.delete(genre);
-  document.getElementById('genre-btn')?.classList.toggle('active', excludedGenres.size > 0);
-  applyFilters();
 }
 
 // ─── Category tree ────────────────────────────────────────────────────────────
@@ -542,11 +473,6 @@ function applyFilters() {
     // Quick type pill
     if (quickType && s.type !== quickType) return false;
 
-    // Genre filter — also hides genre-less items when filter is active
-    if (excludedGenres.size > 0) {
-      if (!s.genre || excludedGenres.has(s.genre)) return false;
-    }
-
     // Category filter — only tests the most-specific (last) node in each path so that
     // checking a leaf doesn't get blocked by its still-excluded ancestors.
     // Items with no categories are also hidden when the filter is active.
@@ -597,29 +523,13 @@ function applyFilters() {
 }
 
 function syncFilterPanels() {
-  // Genre panel: check only genres present in currently filtered results
-  const visibleGenres = new Set(filtered.map(s => s.genre).filter(Boolean));
-  const genrePanel = document.getElementById('genre-selector');
-  if (genrePanel && !genrePanel.hidden) {
-    genrePanel.querySelectorAll('.fp-list input[type=checkbox]').forEach(cb => {
-      cb.checked = visibleGenres.has(cb.value) && !excludedGenres.has(cb.value);
-    });
-  }
-
-  // Category panels: check only nodes present in currently filtered results
-  const visibleCatNodes = new Set();
-  for (const s of filtered) {
-    for (const path of (Array.isArray(s.categories) ? s.categories : [])) {
-      for (const n of path) visibleCatNodes.add(n);
-    }
-  }
   for (const treeEl of [
     document.querySelector('#cats-selector .cat-tree'),
     document.querySelector('#sheet-cat-tree .cat-tree'),
     document.querySelector('#filter-panel .cat-tree'),
   ].filter(Boolean)) {
     treeEl.querySelectorAll('input[type=checkbox]').forEach(cb => {
-      cb.checked = visibleCatNodes.has(cb.value) && !excludedCategories.has(cb.value);
+      cb.checked = !excludedCategories.has(cb.value);
       cb.indeterminate = false;
     });
     _updateIndeterminate(treeEl);
@@ -1247,7 +1157,6 @@ function closeFilterSheet() {
 
 function resetFilters() {
   quickType = '';
-  excludedGenres.clear();
   excludedCategories.clear();
   colFilters = {};
   document.getElementById('favs-only').checked = false;
@@ -1257,7 +1166,6 @@ function resetFilters() {
 
 function buildFilterSheet() {
   const types  = [...new Set(allSales.map(s => s.type).filter(Boolean))].sort();
-  const genres = [...new Set(allSales.map(s => s.genre).filter(Boolean))].sort();
   const ratingFilter = colFilters['rating'] || {};
   const favsOnly     = document.getElementById('favs-only').checked;
 
@@ -1321,24 +1229,6 @@ function buildFilterSheet() {
              oninput="narratorFilter=this.value; applyFilters()">
     </div>
 
-    ${genres.length ? `
-    <div class="sheet-section">
-      <div class="sheet-label" style="display:flex;align-items:center;justify-content:space-between">
-        <span>Genre</span>
-        <span style="display:flex;gap:6px">
-          <button onclick="selectAllGenres();buildFilterSheet()" style="font-size:11px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:var(--surface);cursor:pointer">Select all</button>
-          <button onclick="clearGenreFilter();buildFilterSheet()" style="font-size:11px;padding:2px 8px;border:1px solid var(--border);border-radius:3px;background:var(--surface);cursor:pointer">Uncheck all</button>
-        </span>
-      </div>
-      <div class="sheet-tag-list">
-        ${genres.map(g => `
-          <label class="sheet-check">
-            <input type="checkbox" value="${esc(g)}" ${!excludedGenres.has(g)?'checked':''}
-                   onchange="toggleGenrePill('${esc(g)}',this.checked)">
-            ${esc(g)}
-          </label>`).join('')}
-      </div>
-    </div>` : ''}
 
     <div class="sheet-section">
       <div class="sheet-label">Min rating: <span id="sheet-rating-val">${ratingFilter.min ?? 0}</span>★</div>
