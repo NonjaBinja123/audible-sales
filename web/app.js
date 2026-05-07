@@ -81,8 +81,7 @@ let cardFields = new Set(
 // ─── State ────────────────────────────────────────────────────────────────────
 let allSales      = [];
 let filtered      = [];
-let sortKey       = 'title';
-let sortAsc       = true;
+let sortKeys = [{ dk:'title', asc:true }]; // ordered array of {dk, asc}
 let favorites     = new Set(JSON.parse(localStorage.getItem('audible_favs') || '[]'));
 let ownedAsins    = new Set();
 let visibleCols   = new Set(
@@ -383,6 +382,7 @@ function clearAllFilters() {
   seriesFilter = ''; seriesNameFilter = '';
   document.querySelectorAll('#series-pills .pill').forEach(p => p.classList.remove('active'));
   if (_allPathKeys) selectedPaths = new Set(_allPathKeys);
+  sortKeys = [{ dk:'title', asc:true }];
   colFilters = {};
   document.getElementById('title-search').value = '';
   document.getElementById('favs-only').checked = false;
@@ -650,32 +650,85 @@ function syncFilterPanels() {
 
 // ─── Sort ─────────────────────────────────────────────────────────────────────
 function toggleSort(dk) {
-  if (sortKey === dk) sortAsc = !sortAsc;
-  else { sortKey = dk; sortAsc = true; }
+  if (sortKeys[0]?.dk === dk) sortKeys[0].asc = !sortKeys[0].asc;
+  else sortKeys = [{ dk, asc: true }];
   renderHeader();
+  buildSortPanel();
   applySort();
 }
 
 function sortNorm(v) {
-  // Strip leading non-alphanumeric characters so !,#,etc. don't sort before A-Z
   return typeof v === 'string' ? v.replace(/^[^a-zA-Z0-9]+/, '') : v;
 }
 
 function applySort() {
   filtered.sort((a, b) => {
-    if (sortKey === 'owned') {
-      const oa = ownedAsins.has(a.asin) ? 1 : 0;
-      const ob = ownedAsins.has(b.asin) ? 1 : 0;
-      return sortAsc ? oa - ob : ob - oa;
+    for (const { dk, asc } of sortKeys) {
+      let cmp = 0;
+      if (dk === 'owned') {
+        cmp = (ownedAsins.has(a.asin) ? 1 : 0) - (ownedAsins.has(b.asin) ? 1 : 0);
+      } else {
+        let va = sortNorm(a[dk]), vb = sortNorm(b[dk]);
+        if (va == null && vb == null) continue;
+        if (va == null) cmp = 1;
+        else if (vb == null) cmp = -1;
+        else if (typeof va === 'string') cmp = va.localeCompare(vb);
+        else cmp = va - vb;
+      }
+      if (cmp !== 0) return asc ? cmp : -cmp;
     }
-    let va = sortNorm(a[sortKey]), vb = sortNorm(b[sortKey]);
-    if (va == null && vb == null) return 0;
-    if (va == null) return  sortAsc ?  1 : -1;
-    if (vb == null) return  sortAsc ? -1 :  1;
-    if (typeof va === 'string') return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
-    return sortAsc ? va - vb : vb - va;
+    return 0;
   });
   renderBody();
+}
+
+function toggleSortPanel() {
+  const p = document.getElementById('sort-panel');
+  p.hidden = !p.hidden;
+  if (!p.hidden) {
+    buildSortPanel();
+    const onOut = e => {
+      if (p.contains(e.target) || e.target.closest('#sort-btn')) return;
+      p.hidden = true;
+      document.removeEventListener('mousedown', onOut);
+    };
+    setTimeout(() => document.addEventListener('mousedown', onOut), 0);
+  }
+}
+
+function buildSortPanel() {
+  const p = document.getElementById('sort-panel');
+  if (!p || p.hidden) return;
+  const cols = COLUMNS.filter(c => c.sort && c.dk);
+  p.innerHTML = [0, 1, 2].map(i => {
+    const s      = sortKeys[i];
+    const locked = i > 0 && !sortKeys[i - 1];
+    const selHtml = `<option value="">—</option>` +
+      cols.map(c => `<option value="${esc(c.dk)}" ${s?.dk === c.dk ? 'selected' : ''}>${esc(c.label)}</option>`).join('');
+    return `<div class="sort-row ${locked ? 'sort-row-disabled' : ''}">
+      <span class="sort-level-num">${i + 1}</span>
+      <select class="sort-select" ${locked ? 'disabled' : ''} onchange="setSortLevel(${i},this.value)">
+        ${selHtml}
+      </select>
+      <button class="sort-dir-btn" ${!s ? 'disabled' : ''} onclick="toggleSortDir(${i})">
+        ${!s ? '↕' : s.asc ? '↑' : '↓'}
+      </button>
+    </div>`;
+  }).join('');
+  document.getElementById('sort-btn')?.classList.toggle('active', sortKeys.length > 1 ||
+    (sortKeys.length === 1 && sortKeys[0].dk !== 'title'));
+}
+
+function setSortLevel(level, dk) {
+  if (!dk) sortKeys = sortKeys.slice(0, level);
+  else { sortKeys = sortKeys.slice(0, level); sortKeys[level] = { dk, asc: true }; }
+  renderHeader();
+  buildSortPanel();
+  applySort();
+}
+
+function toggleSortDir(level) {
+  if (sortKeys[level]) { sortKeys[level].asc = !sortKeys[level].asc; renderHeader(); buildSortPanel(); applySort(); }
 }
 
 // ─── Render ───────────────────────────────────────────────────────────────────
@@ -699,7 +752,16 @@ function renderHeader() {
     lbl.className = 'th-label' + (col.sort ? ' sortable' : '');
     lbl.textContent = col.label;
     if (col.sort) {
-      if (sortKey === col.dk) lbl.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+      const si = sortKeys.findIndex(s => s.dk === col.dk);
+      if (si >= 0) {
+        lbl.classList.add(sortKeys[si].asc ? 'sort-asc' : 'sort-desc');
+        if (sortKeys.length > 1) {
+          const badge = document.createElement('sup');
+          badge.className = 'sort-badge';
+          badge.textContent = si + 1;
+          lbl.appendChild(badge);
+        }
+      }
       lbl.onclick = () => toggleSort(col.dk);
     }
     inner.appendChild(lbl);
@@ -1316,18 +1378,18 @@ function buildFilterSheet() {
   const ratingFilter = colFilters['rating'] || {};
   const favsOnly     = document.getElementById('favs-only').checked;
 
-  const sortOptions = [
-    ['title',        'Title A–Z'],
-    ['rating',       'Rating (high–low)'],
-    ['rating_count', '# Ratings (high–low)'],
-    ['bayesian',     'Bayesian (high–low)'],
-    ['weighted',     'Weighted (high–low)'],
-    ['length_hours', 'Length (short–long)'],
-    ['price',        'Price (low–high)'],
-    ['owned',        'Owned first'],
-  ].map(([val, label]) =>
-    `<option value="${val}" ${sortKey === val ? 'selected' : ''}>${label}</option>`
-  ).join('');
+  const sortableCols = COLUMNS.filter(c => c.sort && c.dk);
+  const sortRowHtml = (level) => {
+    const s = sortKeys[level];
+    const locked = level > 0 && !sortKeys[level - 1];
+    const opts = `<option value="">—</option>` +
+      sortableCols.map(c => `<option value="${esc(c.dk)}" ${s?.dk === c.dk ? 'selected' : ''}>${esc(c.label)}</option>`).join('');
+    return `<div class="sort-row ${locked ? 'sort-row-disabled' : ''}" style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+      <span class="sort-level-num">${level + 1}</span>
+      <select class="sheet-select" style="flex:1" ${locked ? 'disabled' : ''} onchange="setMobileSort(${level},this.value)">${opts}</select>
+      <button class="sort-dir-btn" ${!s ? 'disabled' : ''} onclick="sortKeys[${level}]&&(sortKeys[${level}].asc=!sortKeys[${level}].asc,applySort(),buildFilterSheet())">${!s ? '↕' : s.asc ? '↑' : '↓'}</button>
+    </div>`;
+  };
 
   const typePills = ['', ...types].map(t => {
     const active = quickType === t ? 'active' : '';
@@ -1354,7 +1416,7 @@ function buildFilterSheet() {
 
     <div class="sheet-section">
       <div class="sheet-label">Sort by</div>
-      <select class="sheet-select" onchange="setMobileSort(this.value)">${sortOptions}</select>
+      ${sortRowHtml(0)}${sortRowHtml(1)}${sortRowHtml(2)}
     </div>
 
     <div class="sheet-section">
@@ -1478,10 +1540,9 @@ function setMobileRange(dk, bound, val) {
   applyFilters();
 }
 
-function setMobileSort(key) {
-  const descFirst = ['rating', 'bayesian', 'weighted', 'rating_count'];
-  sortKey  = key;
-  sortAsc  = !descFirst.includes(key);
+function setMobileSort(level, dk) {
+  if (!dk) { sortKeys = sortKeys.slice(0, level); }
+  else { sortKeys = sortKeys.slice(0, level); sortKeys[level] = { dk, asc: !['rating','bayesian','weighted','rating_count'].includes(dk) }; }
   applySort();
 }
 

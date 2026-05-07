@@ -244,6 +244,20 @@ th.filtered { background:#fff8f0; }
 .th-label.sort-asc::after  { content:' ↑'; color:var(--orange); }
 .th-label.sort-desc::after { content:' ↓'; color:var(--orange); }
 .th-label:not(.sort-asc):not(.sort-desc).sortable::after { content:' ⇅'; opacity:.3; }
+.sort-badge { color:var(--orange); font-size:9px; margin-left:1px; vertical-align:super; }
+
+/* Sort panel */
+#sort-btn { padding:5px 12px; border:1px solid var(--border); border-radius:4px; background:var(--surface); cursor:pointer; font-size:13px; font-weight:600; }
+#sort-btn:hover, #sort-btn.active { border-color:var(--orange); color:var(--orange); }
+.sort-panel { min-width:280px; padding:10px; }
+.sort-panel:not([hidden]) { display:flex !important; flex-direction:column; gap:6px; }
+.sort-row { display:flex; align-items:center; gap:6px; }
+.sort-row-disabled { opacity:.4; pointer-events:none; }
+.sort-level-num { font-size:11px; font-weight:700; color:var(--muted); width:12px; flex-shrink:0; }
+.sort-select { flex:1; padding:4px 6px; border:1px solid var(--border); border-radius:4px; font-size:13px; background:var(--surface); color:var(--text); }
+.sort-dir-btn { padding:4px 8px; border:1px solid var(--border); border-radius:4px; background:var(--surface); cursor:pointer; font-size:14px; color:var(--text); flex-shrink:0; }
+.sort-dir-btn:hover:not(:disabled) { border-color:var(--orange); color:var(--orange); }
+.sort-dir-btn:disabled { opacity:.35; cursor:default; }
 
 /* filter button on th */
 .filter-btn {
