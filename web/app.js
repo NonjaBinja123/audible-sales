@@ -482,7 +482,7 @@ function applyFilters() {
     if (_allPathKeys && selectedPaths.size < _allPathKeys.size) {
       const paths = Array.isArray(s.categories) ? s.categories : [];
       if (paths.length === 0) return false; // uncategorized hidden when filter active
-      if (!paths.some(path => path.length > 0 && selectedPaths.has(path.join('|')))) return false;
+      if (!selectedPaths.has(paths[0].join('|'))) return false;
     }
 
     // Region filter (treat null/missing region as 'us')
