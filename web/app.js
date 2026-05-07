@@ -353,28 +353,40 @@ function toggleCatNode(arrow) {
   arrow.textContent = open ? '▶' : '▼';
 }
 
-function toggleCatFilter(name, checked, cb) {
-  if (!checked) excludedCategories.add(name);
-  else          excludedCategories.delete(name);
-
-  // Propagate to children
-  if (cb) {
-    cb.closest('.cat-node')?.querySelectorAll('.cat-children input[type=checkbox]').forEach(child => {
-      child.checked = checked;
-      child.indeterminate = false;
-      if (!checked) excludedCategories.add(child.value);
-      else          excludedCategories.delete(child.value);
-    });
+function toggleCatFilter(name, checked) {
+  if (!checked) {
+    // Uncheck: exclude only this node — path AND logic blocks the path at this node
+    excludedCategories.add(name);
+  } else {
+    // Check: remove this node, all its descendants, and all its ancestors so the
+    // full path from root to leaf is unblocked in both directions
+    excludedCategories.delete(name);
+    _descendantsOf(name).forEach(n => excludedCategories.delete(n));
+    _ancestorsOf(name).forEach(n  => excludedCategories.delete(n));
   }
-
-  // Update indeterminate on all open panels
-  [document.querySelector('#cats-selector .cat-tree'),
-   document.querySelector('#sheet-cat-tree .cat-tree'),
-   document.querySelector('#filter-panel .cat-tree'),
-  ].filter(Boolean).forEach(_updateIndeterminate);
 
   document.getElementById('cats-btn')?.classList.toggle('active', excludedCategories.size > 0);
   renderHeader(); applyFilters();
+}
+
+function _ancestorsOf(name) {
+  const result = new Set();
+  for (const s of allSales)
+    for (const path of (Array.isArray(s.categories) ? s.categories : [])) {
+      const idx = path.indexOf(name);
+      if (idx > 0) for (let i = 0; i < idx; i++) result.add(path[i]);
+    }
+  return result;
+}
+
+function _descendantsOf(name) {
+  const result = new Set();
+  for (const s of allSales)
+    for (const path of (Array.isArray(s.categories) ? s.categories : [])) {
+      const idx = path.indexOf(name);
+      if (idx >= 0) for (let i = idx + 1; i < path.length; i++) result.add(path[i]);
+    }
+  return result;
 }
 
 function _updateIndeterminate(treeEl) {
@@ -472,14 +484,16 @@ function applyFilters() {
     // Quick type pill
     if (quickType && s.type !== quickType) return false;
 
-    // Category filter — only tests the most-specific (last) node in each path so that
-    // checking a leaf doesn't get blocked by its still-excluded ancestors.
-    // Items with no categories are also hidden when the filter is active.
+    // Category filter — path AND logic: show if any complete path has no excluded nodes.
+    // Checking a node also clears its ancestors/descendants so the path opens fully.
+    // Items with no categories are hidden when filter is active.
     if (excludedCategories.size > 0) {
       const paths = Array.isArray(s.categories) ? s.categories : [];
-      if (paths.length === 0) return false; // no categories → hidden when filter active
-      const hasMatch = paths.some(path => path.length > 0 && !excludedCategories.has(path[path.length - 1]));
-      if (!hasMatch) return false;
+      if (paths.length === 0) return false;
+      const hasCleanPath = paths.some(path =>
+        path.length > 0 && path.every(node => !excludedCategories.has(node))
+      );
+      if (!hasCleanPath) return false;
     }
 
     // Region filter (treat null/missing region as 'us')
@@ -531,7 +545,6 @@ function syncFilterPanels() {
       cb.checked = !excludedCategories.has(cb.value);
       cb.indeterminate = false;
     });
-    _updateIndeterminate(treeEl);
   }
 }
 
