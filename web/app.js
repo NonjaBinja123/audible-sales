@@ -154,6 +154,68 @@ function cycleTheme() {
   _syncThemeBtn();
 }
 
+// ─── Pull-to-refresh (mobile) ─────────────────────────────────────────────────
+(function initPTR() {
+  const PTR_ZONE   = 80;  // px from top of screen where drag can start
+  const PTR_THRESH = 64;  // px of downward movement needed to trigger
+  let startY = -1, ready = false;
+
+  document.addEventListener('touchstart', e => {
+    if (!isMobile()) return;
+    const t = e.touches[0];
+    startY = t.clientY < PTR_ZONE ? t.clientY : -1;
+    ready  = false;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (startY < 0 || !isMobile()) return;
+    const dy  = e.touches[0].clientY - startY;
+    const ind = document.getElementById('ptr-indicator');
+    if (!ind) return;
+    if (dy > 8) {
+      ind.hidden = false;
+      ready = dy >= PTR_THRESH;
+      ind.textContent = ready ? '↑ Release to refresh' : '↓ Pull to refresh';
+      ind.classList.toggle('ready', ready);
+    } else {
+      ind.hidden = true;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    const ind = document.getElementById('ptr-indicator');
+    if (ind) { ind.hidden = true; ind.classList.remove('ready'); }
+    if (ready) refreshData();
+    startY = -1; ready = false;
+  });
+})();
+
+async function refreshData() {
+  const ind = document.getElementById('ptr-indicator');
+  if (ind) { ind.hidden = false; ind.textContent = 'Refreshing…'; ind.classList.remove('ready'); }
+  try {
+    const data      = await fetch(DATA_URL + '?t=' + Date.now()).then(r => r.json());
+    const rated     = data.sales.filter(s => s.rating != null);
+    const globalAvg = rated.reduce((a, s) => a + s.rating, 0) / (rated.length || 1);
+    allSales = data.sales.map(s => ({
+      ...s,
+      bayesian: computeBayesian(s.rating, s.rating_count, globalAvg),
+      weighted: computeWeighted(s.rating, s.rating_count),
+    }));
+    const ts = data.last_updated ? 'Updated: ' + new Date(data.last_updated + 'Z').toLocaleString() : '';
+    document.getElementById('mobile-updated').textContent = ts;
+    _catTree     = _buildTree();
+    _allPathKeys = new Set(_allPathKeysUnder(_catTree, []));
+    if (selectedPaths.size === 0) selectedPaths = new Set(_allPathKeys);
+    buildTypePills();
+    applyFilters();
+  } catch(e) {
+    console.error('Refresh failed:', e);
+  } finally {
+    if (ind) { ind.hidden = true; }
+  }
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
   showTosBanner();
