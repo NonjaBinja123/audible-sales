@@ -1223,7 +1223,8 @@ function renderCards() {
     return;
   }
 
-  const sortDef = CARD_FIELD_DEFS.find(d => d.key === sortKey);
+  const primaryDk = sortKeys[0]?.dk;
+  const sortDef = CARD_FIELD_DEFS.find(d => d.key === primaryDk);
 
   const frag = document.createDocumentFragment();
   for (const sale of filtered) {
@@ -1284,7 +1285,7 @@ function renderCards() {
     footer.appendChild(badge);
 
     // Sort value — always shown if sorted by a displayable field not already in chips
-    if (sortDef && !cardFields.has(sortKey)) {
+    if (sortDef && !cardFields.has(primaryDk)) {
       const val = sortDef.fmt(sale);
       if (val) {
         const sv = document.createElement('span');
