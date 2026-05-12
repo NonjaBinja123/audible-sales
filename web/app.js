@@ -5,8 +5,11 @@ const BAYESIAN_M = 100;
 
 let regionFilter = localStorage.getItem('audible_region') || 'us';
 
-const REGION_FLAGS = { us:'🇺🇸', ca:'🇨🇦', uk:'🇬🇧', au:'🇦🇺', de:'🇩🇪', fr:'🇫🇷', jp:'🇯🇵' };
-const REGION_LABELS = { us:'US', ca:'CA', uk:'UK', au:'AU', de:'DE', fr:'FR', jp:'JP' };
+const REGION_FLAGS    = { us:'🇺🇸', ca:'🇨🇦', uk:'🇬🇧', au:'🇦🇺', de:'🇩🇪', fr:'🇫🇷', jp:'🇯🇵', in:'🇮🇳', br:'🇧🇷', es:'🇪🇸', it:'🇮🇹' };
+const REGION_LABELS   = { us:'US', ca:'CA', uk:'UK', au:'AU', de:'DE', fr:'FR', jp:'JP', in:'IN', br:'BR', es:'ES', it:'IT' };
+const REGION_CURRENCY = { us:'$', ca:'CA$', uk:'£', au:'AU$', de:'€', fr:'€', jp:'¥', in:'₹', br:'R$', es:'€', it:'€' };
+
+function _currency(region) { return REGION_CURRENCY[region] || '$'; }
 
 function setRegion(code) {
   regionFilter = code;
@@ -71,7 +74,7 @@ const CARD_FIELD_DEFS = [
   { key:'bayesian',     label:'Bayesian',    fmt: s => s.bayesian != null ? 'Bayes ' + s.bayesian.toFixed(2) : null },
   { key:'weighted',     label:'Weighted',    fmt: s => s.weighted != null ? 'Score ' + s.weighted.toFixed(2) : null },
   { key:'series_name',  label:'Series',      fmt: s => s.series_name ? (s.series_name + (s.series_sequence ? ' #' + s.series_sequence : '')) : null },
-  { key:'price',        label:'Price',       fmt: s => s.type === '2for1' ? '1 credit' : (s.price != null ? '$' + s.price.toFixed(2) : null) },
+  { key:'price',        label:'Price',       fmt: s => s.type === '2for1' ? '1 credit' : (s.price != null ? _currency(s.region) + s.price.toFixed(2) : null) },
 ];
 const CARD_FIELD_MAX = 5;
 let cardFields = new Set(
@@ -110,13 +113,12 @@ function openHelp() {
   const close = () => {
     document.getElementById('help-overlay').hidden = true;
     document.getElementById('help-modal').hidden   = true;
-    document.removeEventListener('keydown',  close);
+    document.removeEventListener('keydown', _helpKeyHandler);
     document.getElementById('help-overlay').removeEventListener('click', close);
-    document.getElementById('help-modal').removeEventListener('click', close);
   };
+  function _helpKeyHandler(e) { if (e.key === 'Escape') close(); }
   document.getElementById('help-overlay').addEventListener('click', close);
-  document.getElementById('help-modal').addEventListener('click', close);
-  setTimeout(() => document.addEventListener('keydown', close), 0);
+  setTimeout(() => document.addEventListener('keydown', _helpKeyHandler), 0);
 }
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
@@ -554,7 +556,7 @@ function isFilterActive(dk) {
   if (!f) return false;
   if (f.type === 'list')  return f.excluded.size > 0;
   if (f.type === 'range') return f.min != null || f.max != null;
-  if (f.type === 'price') return !f.includeCredit || f.min != null || f.max != null;
+  if (f.type === 'price') return (f.excludedTypes?.size > 0) || f.min != null || f.max != null;
   if (dk === 'categories') return _allPathKeys ? selectedPaths.size < _allPathKeys.size : false;
   return false;
 }
@@ -612,7 +614,7 @@ function applyFilters() {
         if (f.max != null && (nv == null || nv > f.max)) return false;
       }
       if (f.type === 'price') {
-        if (!f.includeCredit && s.type === '2for1') return false;
+        if (f.excludedTypes?.size && f.excludedTypes.has(s.type)) return false;
         if (s.price != null) {
           if (f.min != null && s.price < f.min) return false;
           if (f.max != null && s.price > f.max) return false;
@@ -826,11 +828,9 @@ function buildCell(sale, col) {
       }
       break;
     }
-    case 'region': {
-      const REGION_FLAGS = { us:'🇺🇸', ca:'🇨🇦', uk:'🇬🇧', au:'🇦🇺', de:'🇩🇪', fr:'🇫🇷', jp:'🇯🇵' };
-      td.textContent = (REGION_FLAGS[sale.region] || '') + ' ' + (sale.region || '').toUpperCase();
+    case 'region':
+      td.textContent = (sale.region || '').toUpperCase();
       break;
-    }
     case 'title': {
       const a = document.createElement('a');
       // Use item's native URL (already has the right regional domain)
@@ -847,8 +847,9 @@ function buildCell(sale, col) {
     }
     case 'type': {
       const b = document.createElement('span');
-      b.className = sale.type === '2for1' ? 'badge badge-2for1' : 'badge badge-monthly';
-      b.textContent = sale.type === '2for1' ? '2-for-1' : 'Monthly';
+      const knownBadge = ['2for1','monthly','daily','cash'].includes(sale.type);
+      b.className = `badge badge-${knownBadge ? sale.type : 'promo'}`;
+      b.textContent = TYPE_LABELS[sale.type] || sale.type || '?';
       td.appendChild(b);
       break;
     }
@@ -882,13 +883,13 @@ function buildCell(sale, col) {
         b.className = 'badge badge-2for1'; b.textContent = '1 credit';
         td.appendChild(b);
       } else if (sale.price != null) {
-        td.textContent = '$' + sale.price.toFixed(2);
+        td.textContent = _currency(sale.region) + sale.price.toFixed(2);
         td.className = 'price-sale num';
       }
       break;
     case 'regular_price':
       if (sale.regular_price != null) {
-        td.textContent = '$' + sale.regular_price.toFixed(2);
+        td.textContent = _currency(sale.region) + sale.regular_price.toFixed(2);
         td.className = 'price-list num';
       }
       break;
@@ -1051,18 +1052,33 @@ function buildRangePanel(panel, col) {
 }
 
 function buildPricePanel(panel, col) {
-  const cur   = colFilters['price'] || { includeCredit: true };
-  const vals  = allSales.map(s => s.price).filter(v => v != null).map(Number);
-  const lo    = vals.length ? Math.min(...vals) : 0;
-  const hi    = vals.length ? Math.max(...vals) : 0;
-  const chk   = cur.includeCredit !== false ? 'checked' : '';
+  const cur  = colFilters['price'] || {};
+  const excl = cur.excludedTypes || new Set();
+  const vals = allSales.map(s => s.price).filter(v => v != null).map(Number);
+  const lo   = vals.length ? Math.min(...vals) : 0;
+  const hi   = vals.length ? Math.max(...vals) : 0;
+
+  // Count items per type; list all known types even if 0
+  const typeCounts = {};
+  for (const s of allSales) typeCounts[s.type] = (typeCounts[s.type] || 0) + 1;
+  const knownTypes  = ['2for1', 'monthly', 'daily', 'cash'];
+  const extraTypes  = Object.keys(typeCounts).filter(t => !knownTypes.includes(t));
+  const allTypes    = [...knownTypes, ...extraTypes];
+
+  const typeRows = allTypes.map(t => {
+    const count   = typeCounts[t] || 0;
+    const checked = !excl.has(t) ? 'checked' : '';
+    const label   = TYPE_LABELS[t] || t;
+    return `<label class="fp-item">
+      <input type="checkbox" ${checked} onchange="fpPriceToggleType('${esc(t)}',this.checked)">
+      ${esc(label)}
+      <small class="cat-count">${count || 'none'}</small>
+    </label>`;
+  }).join('');
 
   panel.innerHTML = `
     <div class="fp-head"><strong>Sale Price</strong></div>
-    <label class="fp-item" style="padding:8px 10px;border-bottom:1px solid var(--border)">
-      <input type="checkbox" id="pf-credit" ${chk} onchange="fpPriceCredit(this.checked)">
-      1-credit (2-for-1) sales
-    </label>
+    <div class="fp-list" style="border-bottom:1px solid var(--border)">${typeRows}</div>
     <div class="fp-range" style="padding-top:8px">
       <small style="color:var(--muted);padding:0 10px">Cash price range:</small>
       <label>Min<input type="number" id="rfmin" step="0.01" placeholder="${+lo.toFixed(2)}" value="${cur.min ?? ''}" oninput="fpPriceRange()"></label>
@@ -1071,16 +1087,17 @@ function buildPricePanel(panel, col) {
     <button class="fp-clear-btn" onclick="fpPriceClear()">Clear</button>`;
 }
 
-function fpPriceCredit(checked) {
-  if (!colFilters['price']) colFilters['price'] = { type: 'price', includeCredit: true };
-  colFilters['price'].includeCredit = checked;
+function fpPriceToggleType(type, checked) {
+  if (!colFilters['price']) colFilters['price'] = { type: 'price', excludedTypes: new Set() };
+  if (!colFilters['price'].excludedTypes) colFilters['price'].excludedTypes = new Set();
+  checked ? colFilters['price'].excludedTypes.delete(type) : colFilters['price'].excludedTypes.add(type);
   renderHeader(); applyFilters();
 }
 
 function fpPriceRange() {
   const min = document.getElementById('rfmin')?.value;
   const max = document.getElementById('rfmax')?.value;
-  if (!colFilters['price']) colFilters['price'] = { type: 'price', includeCredit: true };
+  if (!colFilters['price']) colFilters['price'] = { type: 'price', excludedTypes: new Set() };
   colFilters['price'].type = 'price';
   colFilters['price'].min  = min !== '' ? +min : null;
   colFilters['price'].max  = max !== '' ? +max : null;
@@ -1306,7 +1323,7 @@ function renderCards() {
       } else if (sale.price != null) {
         const cp = document.createElement('span');
         cp.className = 'card-price';
-        cp.textContent = '$' + sale.price.toFixed(2);
+        cp.textContent = _currency(sale.region) + sale.price.toFixed(2);
         footer.appendChild(cp);
       }
     }
@@ -1366,12 +1383,15 @@ function closeFilterSheet() {
 }
 
 function resetFilters() {
-  quickType = '';
+  quickType = ''; searchQuery = ''; ownedFilter = '';
+  authorFilter = ''; narratorFilter = ''; seriesFilter = ''; seriesNameFilter = '';
   if (_allPathKeys) selectedPaths = new Set(_allPathKeys);
+  sortKeys = [{ dk:'title', asc:true }];
   colFilters = {};
   document.getElementById('favs-only').checked = false;
   buildFilterSheet();
   applyFilters();
+  _updateClearBtn();
 }
 
 function buildFilterSheet() {
@@ -1469,19 +1489,14 @@ function buildFilterSheet() {
     </div>
 
     <div class="sheet-section">
-      <div class="sheet-label">Sale Price</div>
-      <label class="sheet-check" style="margin-bottom:8px">
-        <input type="checkbox" ${(colFilters['price']?.includeCredit ?? true) ? 'checked' : ''}
-               onchange="fpPriceCredit(this.checked)">
-        Include 1-credit (2-for-1)
-      </label>
+      <div class="sheet-label">Cash price range</div>
       <div class="sheet-range-row">
         <label>Min<input type="number" step="0.01" placeholder="0"
                value="${colFilters['price']?.min ?? ''}"
-               oninput="if(!colFilters['price'])colFilters['price']={type:'price',includeCredit:true};colFilters['price'].min=this.value?+this.value:null;applyFilters()"></label>
+               oninput="if(!colFilters['price'])colFilters['price']={type:'price',excludedTypes:new Set()};colFilters['price'].min=this.value?+this.value:null;applyFilters()"></label>
         <label>Max<input type="number" step="0.01" placeholder="any"
                value="${colFilters['price']?.max ?? ''}"
-               oninput="if(!colFilters['price'])colFilters['price']={type:'price',includeCredit:true};colFilters['price'].max=this.value?+this.value:null;applyFilters()"></label>
+               oninput="if(!colFilters['price'])colFilters['price']={type:'price',excludedTypes:new Set()};colFilters['price'].max=this.value?+this.value:null;applyFilters()"></label>
       </div>
     </div>
 

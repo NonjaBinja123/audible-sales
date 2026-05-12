@@ -247,7 +247,8 @@ def _fetch_daily_deal(asin: str, base: str = "https://www.audible.com", region: 
 # Monthly deals (public — no auth needed)
 # ---------------------------------------------------------------------------
 
-def scrape_monthly(base: str, ovr: str, region: str, deals_path: str = "/ep/audiobook-deals") -> list[dict]:
+def scrape_monthly(base: str, ovr: str, region: str, deals_path: str = "/ep/audiobook-deals") -> tuple[list[dict], list[dict]]:
+    """Returns (monthly_items, daily_items) — daily kept separate so it can coexist with monthly."""
     session = _make_session()
     url = f"{base}{deals_path}?{ovr}" if ovr else f"{base}{deals_path}"
     print(f"  Starting at {url}")
@@ -264,13 +265,15 @@ def scrape_monthly(base: str, ovr: str, region: str, deals_path: str = "/ep/audi
 
     items = _scrape_listing(session, url, "monthly", region, base)
 
+    daily_items: list[dict] = []
     if daily_asin:
         print(f"  Fetching daily deal data...")
         daily_item = _fetch_daily_deal(daily_asin, base, region)
         if daily_item:
-            items.append(daily_item)
+            daily_items.append(daily_item)
+            print(f"  Daily deal: {daily_item.get('title', daily_asin)}")
 
-    return items
+    return items, daily_items
 
 
 # ---------------------------------------------------------------------------
@@ -282,32 +285,57 @@ def _slug_to_type(slug: str) -> str:
     slug = slug.lower()
     if any(x in slug for x in ('2for1', '2-for-1', 'bogo', 'buy2')):
         return '2for1'
-    if 'cash' in slug:
+    if any(x in slug for x in ('cash', 'price', 'dollar')):
         return 'cash'
+    if any(x in slug for x in ('site-wide', 'sitewide', 'sale', 'savings')):
+        return 'cash'  # site-wide promos are almost always cash-price discounts
     if 'daily' in slug:
         return 'daily'
     # Normalize slug: strip non-alphanumeric, truncate
     return re.sub(r'[^a-z0-9]', '', slug)[:20] or 'promo'
 
 
+def _detect_type_from_content(html: str, slug_type: str) -> str:
+    """Refine sale type from page content when the URL slug is ambiguous."""
+    text = html.lower()
+    credit_signals = (text.count('1 credit') + text.count('use 1 credit')
+                      + len(re.findall(r'with\s+1\s+credit', text)))
+    cash_signals   = len(re.findall(r'\$[\d]+\.[\d]{2}', html))
+    if credit_signals > cash_signals * 2:
+        return '2for1'
+    if cash_signals > credit_signals * 2 and slug_type not in ('2for1',):
+        return 'cash'
+    return slug_type
+
+
 def _discover_promo_paths(session: curl.Session, base: str, ovr: str) -> dict[str, str]:
     """
-    Scrape Audible's home + deals pages to find active /special-promo/ URLs.
-    Returns {promo_path: sale_type}, e.g. {'/special-promo/2for1': '2for1'}.
+    Scrape Audible's hub pages to find active promotional sale URLs.
+    Returns {promo_path: sale_type}.
+    Looks for /special-promo/ links and refines type from page content.
     """
     found: dict[str, str] = {}
     def url(path): return f"{base}{path}?{ovr}" if ovr else f"{base}{path}"
-    check = [url("/"), url("/ep/audiobook-deals"), url("/ep/deals-and-sales")]
-    for url in check:
+    check = [url("/"), url("/ep/audiobook-deals"), url("/ep/deals-and-sales"), url("/ep/deals")]
+    for hub_url in check:
         try:
-            r = session.get(url, timeout=20)
+            r = session.get(hub_url, timeout=20)
             paths = re.findall(r'href="(/special-promo/[^/"?]+)', r.text)
             for path in paths:
                 if path not in found:
-                    slug = path.split('/')[-1]
-                    found[path] = _slug_to_type(slug)
+                    slug      = path.split('/')[-1]
+                    slug_type = _slug_to_type(slug)
+                    # Fetch the promo page itself to refine type from content
+                    try:
+                        promo_url = f"{base}{path}?{ovr}" if ovr else f"{base}{path}"
+                        pr = session.get(promo_url, timeout=20)
+                        if pr.status_code == 200:
+                            slug_type = _detect_type_from_content(pr.text, slug_type)
+                    except Exception:
+                        pass
+                    found[path] = slug_type
         except Exception as e:
-            print(f"  Discovery error on {url}: {e}", file=sys.stderr)
+            print(f"  Discovery error on {hub_url}: {e}", file=sys.stderr)
     return found
 
 
@@ -468,20 +496,28 @@ def enrich_tags(sales: list[dict]) -> list[dict]:
     if backfilled:
         print(f"  Backfilled genre for {backfilled} existing items from tags.")
 
-    needs = [s for s in sales if s.get("tags") is None or s.get("categories") is None]
-    if not needs:
+    needs_asins = {s["asin"] for s in sales if s.get("tags") is None or s.get("categories") is None}
+    if not needs_asins:
         print("  Tags already up to date.")
         return sales
 
-    print(f"  Enriching {len(needs)} items with Audible category data...")
+    # One API call per unique ASIN — same book may appear under multiple types
+    seen: set[str] = set()
+    to_enrich = []
+    for s in sales:
+        if s["asin"] in needs_asins and s["asin"] not in seen:
+            to_enrich.append(s)
+            seen.add(s["asin"])
+
+    print(f"  Enriching {len(to_enrich)} items with Audible category data...")
     print("  (First run may take several minutes — subsequent runs only process new items)")
 
-    auth    = audible.Authenticator.from_file(SCRAPER_DIR / "auth.json")
-    by_asin = {s["asin"]: s for s in sales}
-    done    = 0
+    auth     = audible.Authenticator.from_file(SCRAPER_DIR / "auth.json")
+    enriched: dict[str, dict] = {}
+    done     = 0
 
     with audible.Client(auth=auth) as client:
-        for sale in needs:
+        for sale in to_enrich:
             asin = sale["asin"]
             try:
                 resp    = client.get(
@@ -490,19 +526,22 @@ def enrich_tags(sales: list[dict]) -> list[dict]:
                 )
                 product = resp.get("product", resp)
                 tags, genre, categories = _extract_tags(product)
-                by_asin[asin]["tags"]       = tags
-                by_asin[asin]["genre"]      = genre
-                by_asin[asin]["categories"] = categories
+                enriched[asin] = {"tags": tags, "genre": genre, "categories": categories}
             except Exception as e:
-                by_asin[asin]["tags"] = ""
+                enriched[asin] = {"tags": "", "genre": None, "categories": None}
                 print(f"  Warning: could not enrich {asin}: {e}", file=sys.stderr)
             done += 1
             if done % 100 == 0:
-                print(f"  Enriched {done}/{len(needs)}...")
-            import time; time.sleep(0.15)  # ~6-7 req/s, well within API limits
+                print(f"  Enriched {done}/{len(to_enrich)}...")
+            import time; time.sleep(0.15)
 
-    print(f"  Done enriching {len(needs)} items.")
-    return list(by_asin.values())
+    # Apply enrichment to ALL items with that ASIN (covers daily + monthly duplicates)
+    for s in sales:
+        if s["asin"] in enriched:
+            s.update(enriched[s["asin"]])
+
+    print(f"  Done enriching {len(to_enrich)} items.")
+    return sales
 
 
 # ---------------------------------------------------------------------------
@@ -517,11 +556,12 @@ def load_existing() -> dict:
 
 
 def merge(existing: list[dict], fresh: list[dict]) -> list[dict]:
-    # Key by (asin, region) so the same book in different stores coexists
-    by_key = {(s["asin"], s.get("region", "us")): s for s in existing}
+    # Key by (asin, region, type) so the same book can appear under multiple sale types
+    def _key(s):
+        return (s["asin"], s.get("region", "us"), s.get("type", ""))
+    by_key = {_key(s): s for s in existing}
     for item in fresh:
-        key = (item["asin"], item.get("region", "us"))
-        by_key[key] = item
+        by_key[_key(item)] = item
     return list(by_key.values())
 
 
@@ -577,6 +617,7 @@ def git_push() -> None:
 
 def main() -> None:
     all_monthly: list[dict] = []
+    all_daily:   list[dict] = []
     all_promos:  list[dict] = []
 
     for region_code in ENABLED_REGIONS:
@@ -584,9 +625,10 @@ def main() -> None:
         base, ovr, auth_file = cfg["base"], cfg["ovr"], cfg["auth_file"]
 
         print(f"\n=== [{region_code.upper()}] Monthly deals ===")
-        monthly = scrape_monthly(base, ovr, region_code, cfg.get("deals_path", "/ep/audiobook-deals"))
-        print(f"  Total: {len(monthly)}")
+        monthly, daily = scrape_monthly(base, ovr, region_code, cfg.get("deals_path", "/ep/audiobook-deals"))
+        print(f"  Monthly: {len(monthly)}  Daily: {len(daily)}")
         all_monthly.extend(monthly)
+        all_daily.extend(daily)
 
         print(f"\n=== [{region_code.upper()}] Special promotions ===")
         if auth_file.exists():
@@ -596,14 +638,18 @@ def main() -> None:
         else:
             print(f"  No auth file ({auth_file.name}) — skipping promos for {region_code}")
 
-    fresh = all_monthly + all_promos
-    if not fresh:
+    if not any([all_monthly, all_daily, all_promos]):
         print("Nothing scraped.")
         return
 
     existing = load_existing()
-    merged   = merge(existing["sales"], all_monthly)
-    merged   = merge(merged, all_promos)
+    # Monthly items carry forward; promos and daily are replaced fresh each run
+    _stable = {"monthly"}
+    stable_existing = [s for s in existing["sales"] if s.get("type") in _stable]
+    merged = merge(stable_existing, all_monthly)
+    merged = merge(merged, all_promos)
+    # Daily items use type-aware key so they coexist with monthly for the same ASIN
+    merged = merge(merged, all_daily)
 
     print("\n=== Enriching tags ===")
     merged = enrich_tags(merged)
