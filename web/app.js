@@ -574,7 +574,9 @@ function quickFilterBy(field, value) {
   } else {
     // Exclude every unique value except the clicked one
     const excluded = new Set(
-      [...new Set(allSales.map(s => s[dk]).filter(Boolean))].filter(v => v !== value)
+      [...new Set(allSales.map(s => {
+        const v = s[dk]; return (v == null || v === '') ? '(blank)' : String(v);
+      }))].filter(v => v !== value)
     );
     colFilters[dk] = { type: 'list', excluded };
   }
@@ -630,7 +632,7 @@ function applyFilters() {
         if (dk === 'genre') {
           if (_allGenres(s).every(g => f.excluded.has(g))) return false;
         } else {
-          const sv = s[dk] == null ? '(blank)' : String(s[dk]);
+          const sv = (s[dk] == null || s[dk] === '') ? '(blank)' : String(s[dk]);
           if (f.excluded.has(sv)) return false;
         }
       }
