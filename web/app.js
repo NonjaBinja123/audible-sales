@@ -562,13 +562,25 @@ function isFilterActive(dk) {
 }
 
 // ─── Click-to-filter (author / narrator / series) ────────────────────────────
+const _quickDkMap = { author: 'author', narrator: 'narrator', series: 'series_name' };
+
 function quickFilterBy(field, value) {
-  if (!value) return;
-  if (field === 'author')   { authorFilter     = authorFilter     === value ? '' : value; }
-  if (field === 'narrator') { narratorFilter   = narratorFilter   === value ? '' : value; }
-  if (field === 'series')   { seriesNameFilter = seriesNameFilter === value ? '' : value; }
+  const dk = _quickDkMap[field];
+  if (!dk || !value) return;
+  const f = colFilters[dk];
+  // If this value is already the active (non-excluded) selection → clear
+  if (f?.excluded?.size > 0 && !f.excluded.has(value)) {
+    delete colFilters[dk];
+  } else {
+    // Exclude every unique value except the clicked one
+    const excluded = new Set(
+      [...new Set(allSales.map(s => s[dk]).filter(Boolean))].filter(v => v !== value)
+    );
+    colFilters[dk] = { type: 'list', excluded };
+  }
   applyFilters();
   _updateClearBtn();
+  renderHeader();
 }
 
 function setSearch(val) {
@@ -923,12 +935,29 @@ function buildCell(sale, col) {
     }
     case 'genre': {
       if (sale.genre) {
-        td.textContent = sale.genre;
+        const gf = colFilters['genre'];
+        const filterOn = gf?.excluded?.size > 0;
+        const mkGenreSpan = (text, cls) => {
+          const s = document.createElement('span');
+          s.textContent = text;
+          if (cls) s.className = cls;
+          if (filterOn && !gf.excluded.has(text)) {
+            s.style.fontWeight = '700';
+            s.style.color = 'var(--orange)';
+            if (cls === 'secondary-genre') s.style.fontStyle = 'normal';
+          }
+          return s;
+        };
+        td.appendChild(mkGenreSpan(sale.genre, ''));
         const secondary = _secondaryGenres(sale);
         if (secondary.length) {
           const sm = document.createElement('span');
           sm.className = 'secondary-genre';
-          sm.textContent = ' · ' + secondary.join(', ');
+          sm.appendChild(document.createTextNode(' · '));
+          secondary.forEach((g, i) => {
+            if (i > 0) sm.appendChild(document.createTextNode(', '));
+            sm.appendChild(mkGenreSpan(g, 'secondary-genre'));
+          });
           td.appendChild(sm);
         }
       }
@@ -938,25 +967,28 @@ function buildCell(sale, col) {
     case 'narrator': {
       const field = col.key;
       const val   = sale[col.dk];
+      const dk    = _quickDkMap[field];
       if (val) {
-        const active = (field === 'author' ? authorFilter : narratorFilter) === val;
+        const f      = colFilters[dk];
+        const active = f?.excluded?.size > 0 && !f.excluded.has(val);
         const btn = document.createElement('button');
         btn.className = 'cell-link' + (active ? ' active' : '');
         btn.textContent = val;
         btn.title = active ? `Clear ${col.label} filter` : `Show all books by this ${col.label.toLowerCase()}`;
-        btn.onclick = e => { e.stopPropagation(); quickFilterBy(field, val); renderBody(); };
+        btn.onclick = e => { e.stopPropagation(); quickFilterBy(field, val); };
         td.appendChild(btn);
       }
       break;
     }
     case 'series': {
       if (sale.series_name) {
-        const active = seriesNameFilter === sale.series_name;
+        const sf     = colFilters['series_name'];
+        const active = sf?.excluded?.size > 0 && !sf.excluded.has(sale.series_name);
         const seq = sale.series_sequence ? ` #${sale.series_sequence}` : '';
         const btn = document.createElement('button');
         btn.className = 'cell-link' + (active ? ' active' : '');
         btn.title = active ? 'Clear series filter' : 'Show all books in this series';
-        btn.onclick = e => { e.stopPropagation(); quickFilterBy('series', sale.series_name); renderBody(); };
+        btn.onclick = e => { e.stopPropagation(); quickFilterBy('series', sale.series_name); };
         btn.textContent = sale.series_name;
         td.appendChild(btn);
         if (sale.is_series_start) {
@@ -1318,9 +1350,10 @@ function renderCards() {
     authorEl.className = 'card-meta';
     if (sale.author) {
       const btn = document.createElement('button');
-      btn.className = 'cell-link' + (authorFilter === sale.author ? ' active' : '');
+      const af = colFilters['author'];
+      btn.className = 'cell-link' + (af?.excluded?.size > 0 && !af.excluded.has(sale.author) ? ' active' : '');
       btn.textContent = sale.author;
-      btn.onclick = e => { e.preventDefault(); e.stopPropagation(); quickFilterBy('author', sale.author); renderCards(); };
+      btn.onclick = e => { e.preventDefault(); e.stopPropagation(); quickFilterBy('author', sale.author); };
       authorEl.appendChild(btn);
     }
 
@@ -1340,13 +1373,15 @@ function renderCards() {
         chip.textContent = val;
         // Series and narrator chips are clickable
         if (def.key === 'series_name' && sale.series_name) {
+          const sf = colFilters['series_name'];
           chip.classList.add('cell-link');
-          if (seriesNameFilter === sale.series_name) chip.classList.add('active');
-          chip.onclick = e => { e.preventDefault(); e.stopPropagation(); quickFilterBy('series', sale.series_name); renderCards(); };
+          if (sf?.excluded?.size > 0 && !sf.excluded.has(sale.series_name)) chip.classList.add('active');
+          chip.onclick = e => { e.preventDefault(); e.stopPropagation(); quickFilterBy('series', sale.series_name); };
         } else if (def.key === 'narrator' && sale.narrator) {
+          const nf = colFilters['narrator'];
           chip.classList.add('cell-link');
-          if (narratorFilter === sale.narrator) chip.classList.add('active');
-          chip.onclick = e => { e.preventDefault(); e.stopPropagation(); quickFilterBy('narrator', sale.narrator); renderCards(); };
+          if (nf?.excluded?.size > 0 && !nf.excluded.has(sale.narrator)) chip.classList.add('active');
+          chip.onclick = e => { e.preventDefault(); e.stopPropagation(); quickFilterBy('narrator', sale.narrator); };
         }
         chipRow.appendChild(chip);
       }
