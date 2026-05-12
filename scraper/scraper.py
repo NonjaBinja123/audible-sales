@@ -496,7 +496,7 @@ def enrich_tags(sales: list[dict]) -> list[dict]:
     if backfilled:
         print(f"  Backfilled genre for {backfilled} existing items from tags.")
 
-    needs_asins = {s["asin"] for s in sales if s.get("tags") is None or s.get("categories") is None}
+    needs_asins = {s["asin"] for s in sales if s.get("tags") is None or s.get("categories") is None or s.get("series_name") is None}
     if not needs_asins:
         print("  Tags already up to date.")
         return sales
@@ -509,7 +509,7 @@ def enrich_tags(sales: list[dict]) -> list[dict]:
             to_enrich.append(s)
             seen.add(s["asin"])
 
-    print(f"  Enriching {len(to_enrich)} items with Audible category data...")
+    print(f"  Enriching {len(to_enrich)} items with Audible category + series data...")
     print("  (First run may take several minutes — subsequent runs only process new items)")
 
     auth     = audible.Authenticator.from_file(SCRAPER_DIR / "auth.json")
@@ -522,13 +522,24 @@ def enrich_tags(sales: list[dict]) -> list[dict]:
             try:
                 resp    = client.get(
                     f"1.0/catalog/products/{asin}",
-                    response_groups="product_attrs,product_desc,category_ladders",
+                    response_groups="product_attrs,product_desc,category_ladders,series",
                 )
-                product = resp.get("product", resp)
+                product      = resp.get("product", resp)
                 tags, genre, categories = _extract_tags(product)
-                enriched[asin] = {"tags": tags, "genre": genre, "categories": categories}
+                series_list  = product.get("series") or []
+                s0           = series_list[0] if series_list else {}
+                series_name  = s0.get("title") or ""
+                series_seq   = s0.get("sequence") or ""
+                enriched[asin] = {
+                    "tags": tags, "genre": genre, "categories": categories,
+                    "series_name": series_name, "series_sequence": series_seq,
+                    "is_series_start": series_seq == "1",
+                }
             except Exception as e:
-                enriched[asin] = {"tags": "", "genre": None, "categories": None}
+                enriched[asin] = {
+                    "tags": "", "genre": None, "categories": None,
+                    "series_name": "", "series_sequence": "", "is_series_start": False,
+                }
                 print(f"  Warning: could not enrich {asin}: {e}", file=sys.stderr)
             done += 1
             if done % 100 == 0:
@@ -555,13 +566,25 @@ def load_existing() -> dict:
     return {"last_updated": None, "sales": []}
 
 
+_PRESERVED_FIELDS = ('series_name', 'series_sequence', 'is_series_start', 'tags', 'genre', 'categories')
+
 def merge(existing: list[dict], fresh: list[dict]) -> list[dict]:
-    # Key by (asin, region, type) so the same book can appear under multiple sale types
+    # Key by (asin, region, type) so the same book can appear under multiple sale types.
+    # When updating an existing item, preserve enriched fields the scraper doesn't re-collect.
     def _key(s):
         return (s["asin"], s.get("region", "us"), s.get("type", ""))
-    by_key = {_key(s): s for s in existing}
+    by_key = {_key(s): dict(s) for s in existing}
     for item in fresh:
-        by_key[_key(item)] = item
+        key = _key(item)
+        if key in by_key:
+            old = by_key[key]
+            merged = {**old, **item}
+            for field in _PRESERVED_FIELDS:
+                if item.get(field) is None and old.get(field) is not None:
+                    merged[field] = old[field]
+            by_key[key] = merged
+        else:
+            by_key[key] = item
     return list(by_key.values())
 
 
