@@ -561,6 +561,16 @@ function isFilterActive(dk) {
   return false;
 }
 
+// ─── Click-to-filter (author / narrator / series) ────────────────────────────
+function quickFilterBy(field, value) {
+  if (!value) return;
+  if (field === 'author')   { authorFilter     = authorFilter     === value ? '' : value; }
+  if (field === 'narrator') { narratorFilter   = narratorFilter   === value ? '' : value; }
+  if (field === 'series')   { seriesNameFilter = seriesNameFilter === value ? '' : value; }
+  applyFilters();
+  _updateClearBtn();
+}
+
 function setSearch(val) {
   searchQuery = val.trim();
   // Sync the desktop search box if called from column panel
@@ -934,6 +944,42 @@ function buildCell(sale, col) {
       }
       break;
     }
+    case 'author':
+    case 'narrator': {
+      const field = col.key;
+      const val   = sale[col.dk];
+      if (val) {
+        const active = (field === 'author' ? authorFilter : narratorFilter) === val;
+        const btn = document.createElement('button');
+        btn.className = 'cell-link' + (active ? ' active' : '');
+        btn.textContent = val;
+        btn.title = active ? `Clear ${col.label} filter` : `Show all books by this ${col.label.toLowerCase()}`;
+        btn.onclick = e => { e.stopPropagation(); quickFilterBy(field, val); renderBody(); };
+        td.appendChild(btn);
+      }
+      break;
+    }
+    case 'series': {
+      if (sale.series_name) {
+        const active = seriesNameFilter === sale.series_name;
+        const seq = sale.series_sequence ? ` #${sale.series_sequence}` : '';
+        const btn = document.createElement('button');
+        btn.className = 'cell-link' + (active ? ' active' : '');
+        btn.title = active ? 'Clear series filter' : 'Show all books in this series';
+        btn.onclick = e => { e.stopPropagation(); quickFilterBy('series', sale.series_name); renderBody(); };
+        btn.textContent = sale.series_name;
+        td.appendChild(btn);
+        if (sale.is_series_start) {
+          const b = document.createElement('span');
+          b.className = 'badge badge-series-start';
+          b.textContent = '#1';
+          td.appendChild(b);
+        } else if (seq) {
+          td.appendChild(document.createTextNode(seq));
+        }
+      }
+      break;
+    }
     default:
       td.textContent = sale[col.dk] ?? '';
   }
@@ -1270,7 +1316,13 @@ function renderCards() {
 
     const authorEl = document.createElement('div');
     authorEl.className = 'card-meta';
-    authorEl.textContent = sale.author || '';
+    if (sale.author) {
+      const btn = document.createElement('button');
+      btn.className = 'cell-link' + (authorFilter === sale.author ? ' active' : '');
+      btn.textContent = sale.author;
+      btn.onclick = e => { e.preventDefault(); e.stopPropagation(); quickFilterBy('author', sale.author); renderCards(); };
+      authorEl.appendChild(btn);
+    }
 
     det.appendChild(titleEl);
     det.appendChild(authorEl);
@@ -1286,6 +1338,16 @@ function renderCards() {
         const chip = document.createElement('span');
         chip.className = 'card-chip';
         chip.textContent = val;
+        // Series and narrator chips are clickable
+        if (def.key === 'series_name' && sale.series_name) {
+          chip.classList.add('cell-link');
+          if (seriesNameFilter === sale.series_name) chip.classList.add('active');
+          chip.onclick = e => { e.preventDefault(); e.stopPropagation(); quickFilterBy('series', sale.series_name); renderCards(); };
+        } else if (def.key === 'narrator' && sale.narrator) {
+          chip.classList.add('cell-link');
+          if (narratorFilter === sale.narrator) chip.classList.add('active');
+          chip.onclick = e => { e.preventDefault(); e.stopPropagation(); quickFilterBy('narrator', sale.narrator); renderCards(); };
+        }
         chipRow.appendChild(chip);
       }
       if (chipRow.children.length) det.appendChild(chipRow);
