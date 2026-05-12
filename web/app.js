@@ -615,8 +615,12 @@ function applyFilters() {
     // Column filters
     for (const [dk, f] of Object.entries(colFilters)) {
       if (f.type === 'list' && f.excluded.size > 0) {
-        const sv = s[dk] == null ? '(blank)' : String(s[dk]);
-        if (f.excluded.has(sv)) return false;
+        if (dk === 'genre') {
+          if (_allGenres(s).every(g => f.excluded.has(g))) return false;
+        } else {
+          const sv = s[dk] == null ? '(blank)' : String(s[dk]);
+          if (f.excluded.has(sv)) return false;
+        }
       }
       if (f.type === 'range') {
         const nv = s[dk] == null ? null : +s[dk];
@@ -1033,13 +1037,23 @@ function buildTextPanel(panel, col) {
   setTimeout(() => panel.querySelector('input')?.focus(), 50);
 }
 
+function _allGenres(s) {
+  const cats = Array.isArray(s.categories) ? s.categories : [];
+  if (!cats.length) return [s.genre || '(blank)'];
+  const genres = [...new Set(cats.map(p => p[0]).filter(Boolean))];
+  return genres.length ? genres : ['(blank)'];
+}
+
 function buildListPanel(panel, col) {
   const dk   = col.dk;
   const excl = colFilters[dk]?.excluded;
 
-  const vals = [...new Set(allSales.map(s => {
-    const v = s[dk]; return v == null ? '(blank)' : String(v);
-  }))].sort((a, b) => a === '(blank)' ? 1 : b === '(blank)' ? -1 : a.localeCompare(b));
+  const vals = dk === 'genre'
+    ? [...new Set(allSales.flatMap(_allGenres))]
+        .sort((a, b) => a === '(blank)' ? 1 : b === '(blank)' ? -1 : a.localeCompare(b))
+    : [...new Set(allSales.map(s => {
+        const v = s[dk]; return v == null ? '(blank)' : String(v);
+      }))].sort((a, b) => a === '(blank)' ? 1 : b === '(blank)' ? -1 : a.localeCompare(b));
 
   const seriesExtra = dk === 'series_name' ? `
     <label class="fp-item" style="border-bottom:1px solid var(--border);font-weight:600">
