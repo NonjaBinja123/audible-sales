@@ -917,20 +917,6 @@ function buildCell(sale, col) {
       td.style.fontWeight = '700';
       break;
     }
-    case 'series': {
-      if (sale.series_name) {
-        const seq = sale.series_sequence ? ` #${sale.series_sequence}` : '';
-        td.textContent = sale.series_name + seq;
-        if (sale.is_series_start) {
-          const b = document.createElement('span');
-          b.className = 'badge badge-series-start';
-          b.textContent = '#1';
-          td.textContent = sale.series_name;
-          td.appendChild(b);
-        }
-      }
-      break;
-    }
     case 'genre': {
       if (sale.genre) {
         td.textContent = sale.genre;
