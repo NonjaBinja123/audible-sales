@@ -1,4 +1,6 @@
 import csv, json, os, pathlib, re, subprocess, sys
+sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 from datetime import datetime, timezone
 from bs4 import BeautifulSoup
 from curl_cffi import requests as curl
@@ -281,18 +283,15 @@ def scrape_monthly(base: str, ovr: str, region: str, deals_path: str = "/ep/audi
 # ---------------------------------------------------------------------------
 
 def _slug_to_type(slug: str) -> str:
-    """Derive a sale type string from a URL slug like '2for1' or 'cash-sale'."""
+    """Derive a sale type string from a URL slug. Returns a coarse hint;
+    _detect_type_from_content refines it from actual page content."""
     slug = slug.lower()
     if any(x in slug for x in ('2for1', '2-for-1', 'bogo', 'buy2')):
         return '2for1'
-    if any(x in slug for x in ('cash', 'price', 'dollar')):
-        return 'cash'
-    if any(x in slug for x in ('site-wide', 'sitewide', 'sale', 'savings')):
-        return 'cash'  # site-wide promos are almost always cash-price discounts
     if 'daily' in slug:
         return 'daily'
-    # Normalize slug: strip non-alphanumeric, truncate
-    return re.sub(r'[^a-z0-9]', '', slug)[:20] or 'promo'
+    # Everything else is treated as a cash-price sale until content says otherwise
+    return 'cash'
 
 
 def _detect_type_from_content(html: str, slug_type: str) -> str:
@@ -310,32 +309,50 @@ def _detect_type_from_content(html: str, slug_type: str) -> str:
 
 def _discover_promo_paths(session: curl.Session, base: str, ovr: str) -> dict[str, str]:
     """
-    Scrape Audible's hub pages to find active promotional sale URLs.
-    Returns {promo_path: sale_type}.
-    Looks for /special-promo/ links and refines type from page content.
+    Discover active sale pages by scanning hub pages for all internal /ep/ and
+    /special-promo/ paths (including those embedded in JS), then verifying each
+    has actual product listings. Returns {path: sale_type}.
     """
     found: dict[str, str] = {}
     def url(path): return f"{base}{path}?{ovr}" if ovr else f"{base}{path}"
-    check = [url("/"), url("/ep/audiobook-deals"), url("/ep/deals-and-sales"), url("/ep/deals")]
-    for hub_url in check:
+
+    # Pages already handled by scrape_monthly — skip them and their genre sub-pages
+    def _is_handled(path: str) -> bool:
+        skip_exact = {'/ep/audiobook-deals', '/ep/monthly-deals-all',
+                      '/ep/deals-and-sales', '/ep/deals'}
+        skip_prefix = ('/ep/monthly-deals-',)
+        return path in skip_exact or any(path.startswith(p) for p in skip_prefix)
+
+    hub_urls = [url("/"), url("/ep/audiobook-deals"), url("/ep/deals")]
+    candidates: set[str] = set()
+    for hub_url in hub_urls:
         try:
             r = session.get(hub_url, timeout=20)
-            paths = re.findall(r'href="(/special-promo/[^/"?]+)', r.text)
-            for path in paths:
-                if path not in found:
-                    slug      = path.split('/')[-1]
-                    slug_type = _slug_to_type(slug)
-                    # Fetch the promo page itself to refine type from content
-                    try:
-                        promo_url = f"{base}{path}?{ovr}" if ovr else f"{base}{path}"
-                        pr = session.get(promo_url, timeout=20)
-                        if pr.status_code == 200:
-                            slug_type = _detect_type_from_content(pr.text, slug_type)
-                    except Exception:
-                        pass
-                    found[path] = slug_type
+            # Match both relative paths and absolute URLs (links may be full https://...)
+            raw_paths: list[str] = re.findall(r'["\'](/(?:special-promo|ep)/[\w-]+)', r.text)
+            abs_paths: list[str] = re.findall(
+                r'https?://(?:www\.)?audible\.[a-z.]+(/(?:special-promo|ep)/[\w-]+)', r.text
+            )
+            for path in raw_paths + abs_paths:
+                if not _is_handled(path):
+                    candidates.add(path)
         except Exception as e:
-            print(f"  Discovery error on {hub_url}: {e}", file=sys.stderr)
+            print(f"  Hub scan error on {hub_url}: {e}", file=sys.stderr)
+
+    print(f"  Checking {len(candidates)} candidate pages for product listings...")
+
+    for path in sorted(candidates):
+        try:
+            r = session.get(url(path), timeout=20)
+            if r.status_code != 200 or "productListItem" not in r.text:
+                continue
+            slug_type = _slug_to_type(path.split("/")[-1])
+            slug_type = _detect_type_from_content(r.text, slug_type)
+            found[path] = slug_type
+            print(f"  Found: {path} -> {slug_type!r}")
+        except Exception as e:
+            print(f"  Check error on {path}: {e}", file=sys.stderr)
+
     return found
 
 
